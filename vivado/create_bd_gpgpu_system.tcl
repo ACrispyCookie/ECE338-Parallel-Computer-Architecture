@@ -71,20 +71,22 @@ set_property -dict [list \
 create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 rst_ps7_0_70M
 
 # Inline bit slicing / concatenation used by the GUI-created design.
-create_bd_cell -type ip -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_0
+# Vivado's inline_hdl utility blocks are not normal IP catalog cells; create
+# them with -type inline_hdl, not -type ip.
+create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_0
 set_property -dict [list \
     CONFIG.DIN_WIDTH {4} \
     CONFIG.DIN_FROM {3} \
     CONFIG.DIN_TO {3} \
 ] [get_bd_cells ilslice_0]
 
-create_bd_cell -type ip -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_1
+create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_1
 set_property -dict [list \
     CONFIG.DIN_WIDTH {4} \
     CONFIG.DIN_FROM {2} \
 ] [get_bd_cells ilslice_1]
 
-create_bd_cell -type ip -vlnv xilinx.com:inline_hdl:ilconcat:1.0 ilconcat_0
+create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconcat:1.0 ilconcat_0
 set_property -dict [list \
     CONFIG.NUM_PORTS {5} \
 ] [get_bd_cells ilconcat_0]
@@ -146,15 +148,16 @@ connect_bd_net [get_bd_pins GPGPU_0/o_host_busy] [get_bd_pins ilconcat_0/In3]
 connect_bd_net [get_bd_pins GPGPU_0/o_host_done] [get_bd_pins ilconcat_0/In4]
 connect_bd_net [get_bd_pins ilconcat_0/dout] [get_bd_pins axi_gpio_status/gpio_io_i]
 
-# LED/debug status outputs that are constrained in src/constraints.xdc.
-make_bd_pins_external [get_bd_pins GPGPU_0/o_loading]
-make_bd_pins_external [get_bd_pins GPGPU_0/o_running]
-make_bd_pins_external [get_bd_pins GPGPU_0/o_dumping]
+# LED/debug status outputs that are constrained in vivado/constraints/zc702_debug.xdc.
+# Create these top-level BD ports explicitly instead of relying on
+# make_bd_pins_external's version-dependent auto-naming.
+create_bd_port -dir O o_loading_0
+create_bd_port -dir O o_running_0
+create_bd_port -dir O o_dumping_0
 
-# Keep the exact external port names from the existing GUI project.
-set_property name o_loading_0 [get_bd_ports o_loading_0]
-set_property name o_running_0 [get_bd_ports o_running_0]
-set_property name o_dumping_0 [get_bd_ports o_dumping_0]
+connect_bd_net [get_bd_pins GPGPU_0/o_loading] [get_bd_ports o_loading_0]
+connect_bd_net [get_bd_pins GPGPU_0/o_running] [get_bd_ports o_running_0]
+connect_bd_net [get_bd_pins GPGPU_0/o_dumping] [get_bd_ports o_dumping_0]
 
 # -----------------------------------------------------------------------------
 # Deterministic AXI address map. These addresses match host/baremetal/gpgpu_host.c.

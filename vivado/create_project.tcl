@@ -65,5 +65,8 @@ set_property top $TOP_NAME [current_fileset]
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 
-save_project
+# create_project/add_files/generate_target have already materialized the project on
+# disk. Vivado 2025.2 does not provide a no-argument save_project command, and
+# save_project_as cannot target the currently-open project path, so do not call a
+# version-specific save command here.
 puts "INFO: Created deterministic Vivado project: [file join $PROJECT_DIR $PROJECT_NAME.xpr]"
