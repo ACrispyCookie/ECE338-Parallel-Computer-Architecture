@@ -3,7 +3,7 @@
 help:
 	@echo "ECE338 GPGPU repository targets:"
 	@echo "  make test           Run default verification gates"
-	@echo "  make test-rtl       Run RTL simulation tests from the current test/ layout"
+	@echo "  make test-rtl       Run RTL simulation tests"
 	@echo "  make test-programs  Build/check example programs with the installed RISC-V toolchain"
 	@echo "  make create-vivado  Regenerate the Vivado project/block design only"
 	@echo "  make build-vivado   Run the Vivado wrapper script"
@@ -14,25 +14,28 @@ help:
 test: test-rtl test-programs
 
 test-rtl:
-	cd test && ./run_tests.sh
+	./tests/hardware/rtl/run.sh
 
 test-programs:
-	$(MAKE) -C programs CROSS_PREFIX=riscv64-elf
+	$(MAKE) -C software/programs
 
 create-vivado:
-	vivado -mode batch -source vivado/create_project.tcl
+	./hardware/vivado/run.sh --project
 
 build-vivado:
-	./scripts/vivado_build.sh
+	./hardware/vivado/run.sh --bitstream
 
 demo:
 	./demo/run.sh --program nbody-3d --fake --steps 4 --no-browser
 
 clean:
-	rm -rf build
+	rm -rf build .Xil
+	rm -f *.jou *.log *.str *.wdb *.vcd
+	$(MAKE) -C tests/hardware/rtl clean
+	find software/programs -mindepth 2 -maxdepth 2 \( -name "*.elf" -o -name "*.map" -o -name "*_dump_real.asm" -o -name "*_instructions.mem" -o -name "*_x86" \) -delete
 
 clean-vivado:
-	rm -rf build/vivado build/vivado_reports build/hw
+	./hardware/vivado/run.sh --clean
 
 status:
 	git status --short --branch

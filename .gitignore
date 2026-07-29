@@ -1,9 +1,25 @@
+# Build/output roots
+/build/
+/.Xil/
+
+# Vivado/project generated state
 *.jou
 *.log
 *.str
-*.csv
+*.wdb
+*.vcd
+*.bit
+*.ltx
+*.xsa
 *_vitis/
 *_vivado/
+
+# Python/local environments
 venv/
-__pycache__
+__pycache__/
+
+# Project-local notes not intended for publication
 SSOT.md
+
+# Data/log artifacts
+*.csv

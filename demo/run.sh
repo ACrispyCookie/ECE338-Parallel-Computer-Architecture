@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Interactive nbody FPGA demo entrypoint.  Kept separate from programs/run.sh so
+# Interactive nbody FPGA demo entrypoint.  Kept separate from software/programs/run.sh so
 # the normal program build/run workflow stays clean.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROGRAMS_DIR="$REPO_ROOT/programs"
+PROGRAMS_DIR="$REPO_ROOT/software/programs"
 PROGRAM="nbody"
 NBODY_DIR="$PROGRAMS_DIR/$PROGRAM"
 

@@ -2,7 +2,7 @@
 
 ## Running programs on FPGA
 
-The repository has a generic flow for compiling a program, loading it on the FPGA through UART, running it in chunks, dumping a program-defined output window, and optionally visualizing the results.  The root entry point is `./run.sh`; the program-specific behavior lives under `programs/<program>/`.
+The repository has a generic flow for compiling a program, loading it on the FPGA through UART, running it in chunks, dumping a program-defined output window, and optionally visualizing the results.  The root entry point is `./run.sh`; the program-specific behavior lives under `software/programs/<program>/`.
 
 ### Quick example
 
@@ -17,7 +17,7 @@ This command means:
 - run 10 kernel launches,
 - ask each launch to advance 50 logical nbody steps,
 - after each launch, dump the nbody output window from DMEM,
-- let `programs/nbody/fpga.py` append the output to `programs/nbody/data.csv` and update the live visualization,
+- let `software/programs/nbody/fpga.py` append the output to `software/programs/nbody/data.csv` and update the live visualization,
 - after the loop, run the normal visualization script if requested.
 
 Use the serial port that corresponds to your board, for example `/dev/ttyUSB1` or `/dev/ttyACM0`.
@@ -33,16 +33,16 @@ The root `run.sh` is only a thin wrapper:
 internally executes:
 
 ```bash
-programs/run.sh ...
+software/programs/run.sh ...
 ```
 
-This exists so users can start from the repository root while keeping all program build/run logic inside `programs/`.
+This exists so users can start from the repository root while keeping all program build/run logic inside `software/programs/`.
 
-### Program runner: `programs/run.sh`
+### Program runner: `software/programs/run.sh`
 
-`programs/run.sh` performs these steps:
+`software/programs/run.sh` performs these steps:
 
-1. Discovers available program directories under `programs/`.
+1. Discovers available program directories under `software/programs/`.
 2. Parses command-line options such as:
    - `-p, --program PROGRAM`
    - `--fpga`
@@ -56,20 +56,20 @@ This exists so users can start from the repository root while keeping all progra
 3. Builds the selected program with:
 
    ```bash
-   make -C programs PROG=<program> clean
-   make -C programs PROG=<program> <target>
+   make -C software/programs PROG=<program> clean
+   make -C software/programs PROG=<program> <target>
    ```
 
    For an FPGA run it also ensures the raw instruction memory file exists:
 
    ```bash
-   programs/<program>/<program>_instructions.mem
+   software/programs/<program>/<program>_instructions.mem
    ```
 
 4. If `--fpga` was requested, it calls the generic Python FPGA runner:
 
    ```bash
-   python3 programs/fpga_run.py \
+   python3 software/programs/fpga_run.py \
        --program <program> \
        --port <port> \
        --baud <baud> \
@@ -77,14 +77,14 @@ This exists so users can start from the repository root while keeping all progra
        --runs <runs>
    ```
 
-The shell script does not know the nbody memory layout.  It only builds the program and forwards FPGA-run options to `programs/fpga_run.py`.
+The shell script does not know the nbody memory layout.  It only builds the program and forwards FPGA-run options to `software/programs/fpga_run.py`.
 
-### Generic FPGA loop: `programs/fpga_run.py`
+### Generic FPGA loop: `software/programs/fpga_run.py`
 
-`programs/fpga_run.py` owns the common UART lifecycle.  It imports one program-specific adapter from:
+`software/programs/fpga_run.py` owns the common UART lifecycle.  It imports one program-specific adapter from:
 
 ```text
-programs/<program>/fpga.py
+software/programs/<program>/fpga.py
 ```
 
 The adapter must define:
@@ -96,11 +96,11 @@ class ProgramAdapter:
 
 The generic flow is:
 
-1. Import `programs/<program>/fpga.py` and construct `ProgramAdapter(program_dir=...)`.
+1. Import `software/programs/<program>/fpga.py` and construct `ProgramAdapter(program_dir=...)`.
 2. Determine the IMEM file.  By default this is:
 
    ```text
-   programs/<program>/<program>_instructions.mem
+   software/programs/<program>/<program>_instructions.mem
    ```
 
 3. Ask the adapter where the output lives in DMEM:
@@ -116,7 +116,7 @@ The generic flow is:
    configure(steps_per_run=..., runs=..., total_steps=..., visualize=...)
    ```
 
-5. Open the UART monitor using `host/baremetal/gpgpu_uart.py`.
+5. Open the UART monitor using `software/host/baremetal/gpgpu_uart.py`.
 6. Unless `--skip-load-imem` is used, load the program into IMEM.
 7. Optionally call:
 
@@ -189,9 +189,9 @@ The generic flow is:
 
 The key idea is that `fpga_run.py` is program-agnostic.  It knows how to talk to the board, but not what a program's arguments or output mean.
 
-### Program-specific adapter: `programs/nbody/fpga.py`
+### Program-specific adapter: `software/programs/nbody/fpga.py`
 
-`programs/nbody/fpga.py` defines the nbody host-side ABI.  It must match the DMEM constants used by `programs/nbody/nbody.c`.
+`software/programs/nbody/fpga.py` defines the nbody host-side ABI.  It must match the DMEM constants used by `software/programs/nbody/nbody.c`.
 
 Current nbody host-visible words:
 
@@ -218,7 +218,7 @@ DMEM[1024 + body*2 + 1] = y pixel
 The nbody adapter implements the generic hooks as follows:
 
 - `configure(...)`
-  - creates or truncates `programs/nbody/data.csv`,
+  - creates or truncates `software/programs/nbody/data.csv`,
   - writes the CSV header,
   - clears in-memory visualization history.
 
@@ -236,11 +236,11 @@ The nbody adapter implements the generic hooks as follows:
 - `process_output(...)`
   - reads the dumped output words,
   - converts them from 32-bit hex to signed integers,
-  - appends one row to `programs/nbody/data.csv`,
-  - updates `programs/nbody/fpga_latest.svg` for live preview.
+  - appends one row to `software/programs/nbody/data.csv`,
+  - updates `software/programs/nbody/fpga_latest.svg` for live preview.
 
 - `finalize(visualize=True)`
-  - runs `programs/nbody/visualize.py` after the FPGA loop if visualization was requested.
+  - runs `software/programs/nbody/visualize.py` after the FPGA loop if visualization was requested.
 
 ### Chunked execution model
 
@@ -263,7 +263,7 @@ The kernel must therefore keep persistent simulation state in fixed DMEM windows
 
 To rebuild the nbody program from scratch while preserving the FPGA flow, keep these contracts stable first:
 
-1. Keep `programs/nbody/fpga.py` and `programs/nbody/nbody.c` in agreement on all DMEM word offsets.
+1. Keep `software/programs/nbody/fpga.py` and `software/programs/nbody/nbody.c` in agreement on all DMEM word offsets.
 2. Start with the smallest kernel that:
    - reads `DMEM[16..19]`,
    - initializes deterministic per-body state when reset is nonzero,
