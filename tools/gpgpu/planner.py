@@ -123,31 +123,31 @@ class Planner:
         return tuple((name, self.config.get(name)) for name in names)
 
     def _dependency_goal_ids(self, goal_id: str) -> tuple[str, ...]:
-        if goal_id == "program.elf":
-            return ("program.compile_riscv",)
-        if goal_id == "program.image":
-            return ("program.elf",)
-        if goal_id == "fpga.bitstream":
-            return ("fpga.project",)
-        if goal_id == "board.configure":
-            return ("fpga.bitstream",)
-        if goal_id == "kernel.load":
-            return ("board.configure", "program.image")
-        if goal_id == "kernel.run":
-            return ("kernel.load",)
+        if goal_id == "sw.program.elf":
+            return ("sw.program.compile_riscv",)
+        if goal_id == "sw.program.image":
+            return ("sw.program.elf",)
+        if goal_id == "hw.board.bitstream":
+            return ("hw.board.project",)
+        if goal_id == "hw.board.program":
+            return ("hw.board.bitstream",)
+        if goal_id == "hw.board.kernel.load":
+            return ("hw.board.program", "sw.program.image")
+        if goal_id == "hw.board.kernel.run":
+            return ("hw.board.kernel.load",)
         if goal_id == "demo.run":
             backend = self.config.get("backend")
             if backend == "fake":
-                return ("program.native_exe",)
+                return ("sw.program.native",)
             if backend == "fpga-uart":
-                # Requiring kernel.load pulls in board.configure, fpga.bitstream,
-                # and program.image exactly once through normal deduplication.
-                return ("kernel.load",)
+                # Requiring hw.board.kernel.load pulls in hw.board.program, hw.board.bitstream,
+                # and sw.program.image exactly once through normal deduplication.
+                return ("hw.board.kernel.load",)
             raise PlanError(f"Unsupported backend: {backend}")
         if goal_id == "test.rtl":
-            return ("rtl.assemble", "rtl.sim_executable")
+            return ("hw.rtl.assemble", "hw.rtl.sim_executable")
         if goal_id == "test.program":
-            return ("program.native_exe", "program.image")
+            return ("sw.program.native", "sw.program.image")
         return ()
 
     def _identity_for(

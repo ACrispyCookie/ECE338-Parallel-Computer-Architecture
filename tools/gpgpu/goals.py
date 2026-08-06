@@ -23,64 +23,64 @@ class GoalDefinition:
 
 
 GOALS: dict[str, GoalDefinition] = {
-    "program.native_exe": GoalDefinition(
-        goal_id="program.native_exe",
+    "sw.program.native": GoalDefinition(
+        goal_id="sw.program.native",
         kind="artifact",
         public=True,
         description="Build a native reference executable for a selected program.",
         artifact_params=("program", "program.optimization"),
     ),
-    "program.elf": GoalDefinition(
-        goal_id="program.elf",
+    "sw.program.elf": GoalDefinition(
+        goal_id="sw.program.elf",
         kind="artifact",
         public=True,
         description="Build a RISC-V ELF for the selected GPGPU program.",
         artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
     ),
-    "program.image": GoalDefinition(
-        goal_id="program.image",
+    "sw.program.image": GoalDefinition(
+        goal_id="sw.program.image",
         kind="artifact",
         public=True,
         description="Build an instruction-memory image for the selected program.",
         artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
     ),
-    "program.compile_riscv": GoalDefinition(
-        goal_id="program.compile_riscv",
+    "sw.program.compile_riscv": GoalDefinition(
+        goal_id="sw.program.compile_riscv",
         kind="artifact",
         public=False,
         description="Internal RISC-V compiler invocation.",
         artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
     ),
-    "fpga.project": GoalDefinition(
-        goal_id="fpga.project",
+    "hw.board.project": GoalDefinition(
+        goal_id="hw.board.project",
         kind="artifact",
         public=False,
         description="Internal mock Vivado project artifact.",
         artifact_params=("architecture", "platform", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part"),
     ),
-    "fpga.bitstream": GoalDefinition(
-        goal_id="fpga.bitstream",
+    "hw.board.bitstream": GoalDefinition(
+        goal_id="hw.board.bitstream",
         kind="artifact",
         public=True,
         description="Build a programmable-logic bitstream.",
         artifact_params=("architecture", "platform", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"),
     ),
-    "board.configure": GoalDefinition(
-        goal_id="board.configure",
+    "hw.board.program": GoalDefinition(
+        goal_id="hw.board.program",
         kind="action",
         public=True,
         description="Configure the selected board with a compatible bitstream.",
         runtime_params=("board", "board.configure_policy", "board.port"),
     ),
-    "kernel.load": GoalDefinition(
-        goal_id="kernel.load",
+    "hw.board.kernel.load": GoalDefinition(
+        goal_id="hw.board.kernel.load",
         kind="action",
         public=True,
         description="Load a GPGPU program image and initial data into hardware.",
         runtime_params=("board", "kernel.load_policy", "uart.baud"),
     ),
-    "kernel.run": GoalDefinition(
-        goal_id="kernel.run",
+    "hw.board.kernel.run": GoalDefinition(
+        goal_id="hw.board.kernel.run",
         kind="action",
         public=True,
         description="Run a loaded GPGPU kernel through the current transport.",
@@ -108,15 +108,15 @@ GOALS: dict[str, GoalDefinition] = {
         description="Compare a native program run against generated program artifacts.",
         artifact_params=("program", "architecture", "program.optimization"),
     ),
-    "rtl.assemble": GoalDefinition(
-        goal_id="rtl.assemble",
+    "hw.rtl.assemble": GoalDefinition(
+        goal_id="hw.rtl.assemble",
         kind="artifact",
         public=False,
         description="Internal assembly fixture generation.",
         artifact_params=("architecture", "rtl.imem_words", "rtl.dmem_words"),
     ),
-    "rtl.sim_executable": GoalDefinition(
-        goal_id="rtl.sim_executable",
+    "hw.rtl.sim_executable": GoalDefinition(
+        goal_id="hw.rtl.sim_executable",
         kind="artifact",
         public=False,
         description="Internal Icarus simulation executable.",

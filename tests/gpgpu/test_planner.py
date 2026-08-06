@@ -18,12 +18,12 @@ class PlannerFoundationTests(unittest.TestCase):
         config = ConfigResolver().resolve(profile=None, set_values=list(sets))
         return Planner(config)
 
-    def test_runtime_options_do_not_change_program_image_identity(self):
+    def test_runtime_options_do_not_change_native_program_identity(self):
         slow = self.make_planner("demo.fps=12", "demo=nbody-3d", "backend=fake")
         fast = self.make_planner("demo.fps=60", "demo=nbody-3d", "backend=fake")
 
-        slow_image = slow.plan("demo.run").require_instance("program.native_exe")
-        fast_image = fast.plan("demo.run").require_instance("program.native_exe")
+        slow_image = slow.plan("demo.run").require_instance("sw.program.native")
+        fast_image = fast.plan("demo.run").require_instance("sw.program.native")
 
         self.assertEqual(slow_image.identity, fast_image.identity)
 
@@ -32,8 +32,8 @@ class PlannerFoundationTests(unittest.TestCase):
         o3 = self.make_planner("program.optimization=O3")
 
         self.assertNotEqual(
-            o2.plan("program.image").root.identity,
-            o3.plan("program.image").root.identity,
+            o2.plan("sw.program.image").root.identity,
+            o3.plan("sw.program.image").root.identity,
         )
 
     def test_unknown_settings_are_rejected(self):
@@ -59,16 +59,16 @@ class PlannerFoundationTests(unittest.TestCase):
 
     def test_identical_dependency_instances_are_deduplicated(self):
         plan = self.make_planner("backend=fpga-uart").plan("demo.run")
-        bitstreams = [node for node in plan.nodes if node.goal_id == "fpga.bitstream"]
+        bitstreams = [node for node in plan.nodes if node.goal_id == "hw.board.bitstream"]
         self.assertEqual(len(bitstreams), 1)
 
     def test_artifact_goals_are_cacheable(self):
-        node = self.make_planner().plan("program.image").root
+        node = self.make_planner().plan("sw.program.image").root
         self.assertEqual(node.kind, "artifact")
         self.assertTrue(node.cacheable)
 
     def test_action_goals_are_not_cacheable(self):
-        node = self.make_planner().plan("board.configure").root
+        node = self.make_planner().plan("hw.board.program").root
         self.assertEqual(node.kind, "action")
         self.assertFalse(node.cacheable)
 
@@ -80,26 +80,26 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_fake_demo_adds_no_fpga_dependencies(self):
         plan = self.make_planner("demo=nbody-3d", "backend=fake").plan("demo.run")
         goal_ids = {node.goal_id for node in plan.nodes}
-        self.assertIn("program.native_exe", goal_ids)
-        self.assertNotIn("fpga.bitstream", goal_ids)
-        self.assertNotIn("board.configure", goal_ids)
-        self.assertNotIn("kernel.load", goal_ids)
+        self.assertIn("sw.program.native", goal_ids)
+        self.assertNotIn("hw.board.bitstream", goal_ids)
+        self.assertNotIn("hw.board.program", goal_ids)
+        self.assertNotIn("hw.board.kernel.load", goal_ids)
 
     def test_fpga_demo_includes_fpga_and_kernel_dependencies(self):
         plan = self.make_planner("demo=nbody-3d", "backend=fpga-uart").plan("demo.run")
         goal_ids = {node.goal_id for node in plan.nodes}
-        self.assertIn("fpga.bitstream", goal_ids)
-        self.assertIn("board.configure", goal_ids)
-        self.assertIn("program.image", goal_ids)
-        self.assertIn("kernel.load", goal_ids)
+        self.assertIn("hw.board.bitstream", goal_ids)
+        self.assertIn("hw.board.program", goal_ids)
+        self.assertIn("sw.program.image", goal_ids)
+        self.assertIn("hw.board.kernel.load", goal_ids)
 
     def test_public_and_internal_goal_visibility_works(self):
         planner = self.make_planner()
         public_ids = {goal.goal_id for goal in planner.list_goals(include_internal=False)}
         all_ids = {goal.goal_id for goal in planner.list_goals(include_internal=True)}
         self.assertIn("demo.run", public_ids)
-        self.assertNotIn("program.compile_riscv", public_ids)
-        self.assertIn("program.compile_riscv", all_ids)
+        self.assertNotIn("sw.program.compile_riscv", public_ids)
+        self.assertIn("sw.program.compile_riscv", all_ids)
         self.assertNotIn("demo.nbody3d", all_ids)
 
     def test_plan_output_is_deterministic(self):
@@ -119,7 +119,7 @@ class PlannerFoundationTests(unittest.TestCase):
             code = main(["plan", "demo.run", "--set", "demo=nbody-3d", "--set", "backend=fake"])
         self.assertEqual(code, 0)
         self.assertIn("SERVICE", stdout.getvalue())
-        self.assertNotIn("fpga.bitstream", stdout.getvalue())
+        self.assertNotIn("hw.board.bitstream", stdout.getvalue())
 
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
