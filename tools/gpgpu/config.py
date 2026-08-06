@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -44,13 +46,7 @@ class ResolvedConfig:
 
 
 class ConfigResolver:
-    """Resolve the approved initial typed configuration model.
-
-    Initial milestone intentionally supports schema defaults, built-in component
-    defaults, manifests, goal defaults, named profiles, machine-local placeholder
-    values, environment/tool placeholder defaults, and CLI --set overrides. It
-    deliberately does not implement artifact injection.
-    """
+    """Resolve typed GPGPU planner configuration from TOML manifests."""
 
     SCHEMA: dict[str, SettingSpec] = {
         "architecture": SettingSpec("architecture", "str", "gpgpu32", "shared"),
@@ -60,7 +56,6 @@ class ConfigResolver:
         "demo": SettingSpec("demo", "str", "nbody", "shared"),
         "backend": SettingSpec("backend", "enum:fake,fpga-uart", "fake", "runtime"),
         "toolchain": SettingSpec("toolchain", "str", "riscv-gcc-rv32im-ilp32", "shared"),
-        "variant": SettingSpec("variant", "str", "default", "shared"),
         "program.optimization": SettingSpec("program.optimization", "enum:O0,O1,O2,O3", "O2", "artifact"),
         "program.march": SettingSpec("program.march", "str", "rv32im", "artifact"),
         "program.mabi": SettingSpec("program.mabi", "str", "ilp32", "artifact"),
@@ -82,47 +77,19 @@ class ConfigResolver:
         "executor.verbosity": SettingSpec("executor.verbosity", "int", 0, "executor"),
     }
 
-    COMPONENT_DEFAULTS: dict[str, Any] = {
-        "architecture": "gpgpu32",
-        "program.optimization": "O2",
-        "fpga.synth.strategy": "default",
-    }
-
-    MANIFEST_DEFAULTS: dict[str, Any] = {
-        "program": "nbody",
-        "demo": "nbody",
-        "platform": "zynq7000-zedboard",
-    }
-
     GOAL_DEFAULTS: dict[str, Any] = {
         "backend": "fake",
         "kernel.kernel_calls": 1,
     }
 
-    PROFILES: dict[str, dict[str, Any]] = {
-        "zed-demo": {
-            "architecture": "gpgpu32",
-            "platform": "zynq7000-zedboard",
-            "board": "lab-zed",
-            "program": "nbody-3d",
-            "demo": "nbody-3d",
-            "backend": "fpga-uart",
-            "fpga.synth.strategy": "Performance_Explore",
-            "program.optimization": "O2",
-            "board.configure_policy": "if-needed",
-            "demo.fps": 12,
-            "demo.dataset": "rings",
-        }
-    }
-
-    MACHINE_LOCAL_DEFAULTS: dict[str, Any] = {
-        "board.port": "/dev/ttyACM0",
-        "uart.baud": 115200,
-    }
-
     TOOL_ENV_DEFAULTS: dict[str, Any] = {
         "toolchain": "riscv-gcc-rv32im-ilp32",
     }
+
+    def __init__(self, config_root: str | Path | None = None):
+        repo_root = Path(__file__).resolve().parents[2]
+        self.repo_root = repo_root
+        self.config_root = Path(config_root) if config_root is not None else repo_root / "config" / "gpgpu"
 
     def resolve(
         self,
@@ -136,33 +103,129 @@ class ConfigResolver:
         for key, spec in self.SCHEMA.items():
             self._assign(values, provenance, key, spec.default, "schema default")
 
-        layers: list[tuple[str, dict[str, Any]]] = [
-            ("component default", self.COMPONENT_DEFAULTS),
-            ("manifest default", self.MANIFEST_DEFAULTS),
-            ("goal default", self.GOAL_DEFAULTS),
-        ]
+        self._apply_defaults_file(values, provenance, self.config_root / "components.toml", "defaults")
 
+        profile_mapping: dict[str, Any] | None = None
+        profile_source: str | None = None
         if profile is not None:
-            if profile not in self.PROFILES:
-                raise ConfigError(f"Unknown profile: {profile}")
-            layers.append((f"profile: {profile}", self.PROFILES[profile]))
+            profile_mapping, profile_source = self._load_profile(profile)
+            self._apply_mapping(values, provenance, profile_mapping, profile_source)
 
-        layers.extend(
-            [
-                ("machine-local default", self.MACHINE_LOCAL_DEFAULTS),
-                ("tool discovery default", self.TOOL_ENV_DEFAULTS),
-            ]
-        )
+        self._apply_selected_manifest(values, provenance, "architecture", "architectures")
+        self._apply_selected_manifest(values, provenance, "platform", "platforms")
+        self._apply_selected_manifest(values, provenance, "program", "programs")
+        self._apply_selected_manifest(values, provenance, "demo", "demos")
 
-        for source, mapping in layers:
-            for key, value in mapping.items():
-                self._assign(values, provenance, key, value, source)
+        if profile_mapping is not None and profile_source is not None:
+            self._apply_mapping(values, provenance, profile_mapping, profile_source)
+
+        for key, value in self.GOAL_DEFAULTS.items():
+            if key not in provenance or provenance[key].source == "schema default":
+                self._assign(values, provenance, key, value, "goal default")
+
+        self._apply_local(values, provenance)
+
+        for key, value in self.TOOL_ENV_DEFAULTS.items():
+            if key not in provenance or provenance[key].source == "schema default":
+                self._assign(values, provenance, key, value, "tool discovery default")
 
         for item in set_values or []:
             key, raw_value = self._parse_set(item)
             self._assign(values, provenance, key, raw_value, "CLI --set")
 
         return ResolvedConfig(values=values, provenance=provenance)
+
+    def _load_profile(self, profile: str) -> tuple[dict[str, Any], str]:
+        path = self.config_root / "profiles.toml"
+        data = self._read_toml(path)
+        profiles = data.get("profiles", {})
+        if not isinstance(profiles, dict) or profile not in profiles:
+            raise ConfigError(f"Unknown profile: {profile}")
+        mapping = profiles[profile]
+        if not isinstance(mapping, dict):
+            raise ConfigError(f"Profile {profile} must be a table")
+        source = f"{self._source_path(path)}:profiles.{profile}"
+        return self._flatten(mapping), source
+
+    def _apply_selected_manifest(
+        self,
+        values: dict[str, Any],
+        provenance: dict[str, Provenance],
+        selection_key: str,
+        directory: str,
+    ) -> None:
+        selected = values[selection_key]
+        path = self.config_root / directory / f"{selected}.toml"
+        self._apply_defaults_file(values, provenance, path, "defaults", required=False)
+
+    def _apply_local(self, values: dict[str, Any], provenance: dict[str, Provenance]) -> None:
+        local = self.config_root / "local.toml"
+        if local.exists():
+            self._apply_defaults_file(values, provenance, local, "defaults")
+            return
+        self._apply_defaults_file(values, provenance, self.config_root / "local.example.toml", "defaults", required=False)
+
+    def _apply_defaults_file(
+        self,
+        values: dict[str, Any],
+        provenance: dict[str, Provenance],
+        path: Path,
+        section: str,
+        *,
+        required: bool = False,
+    ) -> None:
+        if not path.exists():
+            if required:
+                raise ConfigError(f"Missing config file: {self._source_path(path)}")
+            return
+        data = self._read_toml(path)
+        mapping = data.get(section, {})
+        if not isinstance(mapping, dict):
+            raise ConfigError(f"{self._source_path(path)}:{section} must be a table")
+        self._apply_mapping(values, provenance, self._flatten(mapping), f"{self._source_path(path)}:{section}")
+
+    def _apply_mapping(
+        self,
+        values: dict[str, Any],
+        provenance: dict[str, Provenance],
+        mapping: dict[str, Any],
+        source: str,
+    ) -> None:
+        for key, value in mapping.items():
+            self._assign(values, provenance, self._normalize_key(key), value, source)
+
+    def _normalize_key(self, key: str) -> str:
+        aliases = {
+            "architecture.name": "architecture",
+            "platform.name": "platform",
+            "board.name": "board",
+            "program.name": "program",
+            "demo.name": "demo",
+        }
+        return aliases.get(key, key)
+
+    def _flatten(self, mapping: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+        flat: dict[str, Any] = {}
+        for key, value in mapping.items():
+            full_key = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, dict):
+                flat.update(self._flatten(value, full_key))
+            else:
+                flat[full_key] = value
+        return flat
+
+    def _read_toml(self, path: Path) -> dict[str, Any]:
+        try:
+            with path.open("rb") as f:
+                return tomllib.load(f)
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"Invalid TOML in {self._source_path(path)}: {exc}") from exc
+
+    def _source_path(self, path: Path) -> str:
+        try:
+            return path.resolve().relative_to(self.repo_root.resolve()).as_posix()
+        except ValueError:
+            return path.as_posix()
 
     def _parse_set(self, item: str) -> tuple[str, str]:
         if "=" not in item:

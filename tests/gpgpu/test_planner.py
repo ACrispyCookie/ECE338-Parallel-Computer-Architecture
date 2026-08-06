@@ -51,11 +51,50 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertEqual(a.normalized_items(), b.normalized_items())
         self.assertEqual(a.get("demo.fps"), 30)
 
-    def test_configuration_provenance_is_reported(self):
+    def test_profile_overrides_selected_manifest_defaults(self):
+        config = ConfigResolver().resolve(profile="zed-demo")
+        self.assertEqual(config.get("program.optimization"), "O2")
+        self.assertIn("profiles.toml:profiles.zed-demo", config.provenance_for("program.optimization").source)
+
+    def test_variant_is_not_part_of_initial_schema(self):
+        config = ConfigResolver().resolve(profile="zed-demo")
+        keys = {key for key, _, _ in config.normalized_items()}
+        self.assertNotIn("variant", keys)
+        with self.assertRaisesRegex(ConfigError, "Unknown setting"):
+            ConfigResolver().resolve(set_values=["variant=debug"])
+
+    def test_file_backed_profile_loads_with_provenance(self):
         config = ConfigResolver().resolve(profile="zed-demo", set_values=["demo.fps=30"])
+        self.assertEqual(config.get("program"), "nbody-3d")
+        self.assertEqual(config.get("backend"), "fpga-uart")
+        self.assertEqual(config.get("demo.dataset"), "rings")
+        self.assertIn("config/gpgpu/profiles.toml:profiles.zed-demo", config.provenance_for("backend").source)
+        self.assertIn("config/gpgpu/profiles.toml:profiles.zed-demo", config.provenance_for("program.optimization").source)
         provenance = config.provenance_for("demo.fps")
         self.assertEqual(config.get("demo.fps"), 30)
         self.assertEqual(provenance.source, "CLI --set")
+
+    def test_unknown_profile_is_rejected(self):
+        with self.assertRaisesRegex(ConfigError, "Unknown profile"):
+            ConfigResolver().resolve(profile="missing-profile")
+
+    def test_unknown_manifest_setting_is_rejected(self):
+        resolver = ConfigResolver(config_root=ROOT / "tests" / "fixtures" / "bad_gpgpu_unknown")
+        with self.assertRaisesRegex(ConfigError, "Unknown setting"):
+            resolver.resolve()
+
+    def test_type_invalid_manifest_setting_is_rejected(self):
+        resolver = ConfigResolver(config_root=ROOT / "tests" / "fixtures" / "bad_gpgpu_type")
+        with self.assertRaisesRegex(ConfigError, "expected integer"):
+            resolver.resolve()
+
+    def test_local_board_config_is_optional_and_gitignored(self):
+        config = ConfigResolver().resolve(profile="zed-demo")
+        self.assertEqual(config.get("board.port"), "/dev/ttyACM0")
+        self.assertIn("local.example.toml", config.provenance_for("board.port").source)
+        self.assertTrue((ROOT / "config" / "gpgpu" / "local.example.toml").exists())
+        gitignore = (ROOT / ".gitignore").read_text()
+        self.assertIn("config/gpgpu/local.toml", gitignore)
 
     def test_identical_dependency_instances_are_deduplicated(self):
         plan = self.make_planner("backend=fpga-uart").plan("demo.run")
@@ -128,6 +167,40 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertIn("Configuration provenance", stdout.getvalue())
         self.assertIn("demo.fps", stdout.getvalue())
         self.assertIn("CLI --set", stdout.getvalue())
+
+    def test_local_wrapper_cli_executes_list(self):
+        import subprocess
+
+        result = subprocess.run(
+            [str(ROOT / "tools" / "gpgpu" / "gpgpu"), "list"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("demo.run", result.stdout)
+        self.assertIn("hw.board.bitstream", result.stdout)
+
+    def test_cli_can_render_colorized_output(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["--color", "always", "list"])
+        self.assertEqual(code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("\x1b[", rendered)
+        self.assertIn("●", rendered)
+        self.assertIn("demo.run", rendered)
+
+    def test_cli_plain_output_stays_machine_readable(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["--color", "never", "plan", "demo.run", "--profile", "zed-demo"])
+        self.assertEqual(code, 0)
+        rendered = stdout.getvalue()
+        self.assertNotIn("\x1b[", rendered)
+        self.assertIn("BUILD", rendered)
+        self.assertIn("SERVICE", rendered)
 
 
 if __name__ == "__main__":

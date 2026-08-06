@@ -95,16 +95,19 @@ Noted future cleanup candidates:
 Accepted initial order excludes artifact injection:
 
 1. Schema defaults.
-2. Built-in component defaults.
-3. Architecture/platform/program/demo manifests.
-4. Goal defaults.
-5. Named profile.
-6. Gitignored machine-local config.
-7. Environment variables for tool discovery only.
-8. CLI convenience flags.
-9. CLI `--set namespace.key=value`.
+2. Repo-wide component defaults.
+3. Profile selection values, used to choose manifests.
+4. Selected architecture/platform/program/demo manifests.
+5. Goal defaults for values still unset by higher-specificity files.
+6. Named profile overrides.
+7. Gitignored machine-local config, or `local.example.toml` fallback for the mock planner.
+8. Environment variables for tool discovery only.
+9. CLI convenience flags.
+10. CLI `--set namespace.key=value`.
 
 Every resolved setting preserves provenance for `explain`.
+
+`variant` is intentionally absent from the initial schema until a concrete build variant use case exists.
 
 ## Hardware-state policies
 

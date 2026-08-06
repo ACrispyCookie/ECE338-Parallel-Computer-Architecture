@@ -1,0 +1,6 @@
+# Copy to local.toml for machine-specific board connection settings.
+[defaults.board]
+port = "/dev/ttyACM0"
+
+[defaults.uart]
+baud = 115200
