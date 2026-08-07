@@ -51,7 +51,7 @@ class ConfigResolver:
     SCHEMA: dict[str, SettingSpec] = {
         "architecture": SettingSpec("architecture", "str", "gpgpu32", "shared"),
         "board_type": SettingSpec("board_type", "str", "zynq7000-zedboard", "shared"),
-        "board": SettingSpec("board", "str", "lab-zed", "machine-local"),
+        "board": SettingSpec("board", "str", "zedboard", "machine-local"),
         "program": SettingSpec("program", "str", "nbody", "shared"),
         "demo": SettingSpec("demo", "str", "nbody", "shared"),
         "backend": SettingSpec("backend", "enum:fake,fpga-uart", "fake", "runtime"),
@@ -136,15 +136,14 @@ class ConfigResolver:
         return ResolvedConfig(values=values, provenance=provenance)
 
     def _load_profile(self, profile: str) -> tuple[dict[str, Any], str]:
-        path = self.config_root / "profiles.toml"
-        data = self._read_toml(path)
-        profiles = data.get("profiles", {})
-        if not isinstance(profiles, dict) or profile not in profiles:
+        path = self.config_root / "profiles" / f"{profile}.toml"
+        if not path.exists():
             raise ConfigError(f"Unknown profile: {profile}")
-        mapping = profiles[profile]
-        if not isinstance(mapping, dict):
-            raise ConfigError(f"Profile {profile} must be a table")
-        source = f"{self._source_path(path)}:profiles.{profile}"
+        data = self._read_toml(path)
+        mapping = data.get("profile", {})
+        if not isinstance(mapping, dict) or not mapping:
+            raise ConfigError(f"Profile {profile} must define a [profile] table")
+        source = f"{self._source_path(path)}:profile"
         return self._flatten(mapping), source
 
     def _apply_selected_manifest(

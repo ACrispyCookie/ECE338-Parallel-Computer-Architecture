@@ -54,7 +54,7 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_profile_overrides_selected_manifest_defaults(self):
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("program.optimization"), "O2")
-        self.assertIn("profiles.toml:profiles.zed-demo", config.provenance_for("program.optimization").source)
+        self.assertIn("profiles/zed-demo.toml:profile", config.provenance_for("program.optimization").source)
 
     def test_variant_is_not_part_of_initial_schema(self):
         config = ConfigResolver().resolve(profile="zed-demo")
@@ -67,10 +67,11 @@ class PlannerFoundationTests(unittest.TestCase):
         config = ConfigResolver().resolve(profile="zed-demo", set_values=["demo.fps=30"])
         self.assertEqual(config.get("program"), "nbody-3d")
         self.assertEqual(config.get("board_type"), "zynq7000-zedboard")
+        self.assertEqual(config.get("board"), "zedboard")
         self.assertEqual(config.get("backend"), "fpga-uart")
         self.assertEqual(config.get("demo.dataset"), "rings")
-        self.assertIn("config/gpgpu/profiles.toml:profiles.zed-demo", config.provenance_for("backend").source)
-        self.assertIn("config/gpgpu/profiles.toml:profiles.zed-demo", config.provenance_for("program.optimization").source)
+        self.assertIn("config/gpgpu/profiles/zed-demo.toml:profile", config.provenance_for("backend").source)
+        self.assertIn("config/gpgpu/profiles/zed-demo.toml:profile", config.provenance_for("program.optimization").source)
         provenance = config.provenance_for("demo.fps")
         self.assertEqual(config.get("demo.fps"), 30)
         self.assertEqual(provenance.source, "CLI --set")
@@ -92,6 +93,8 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_local_board_config_is_optional_and_gitignored(self):
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("board.port"), "/dev/ttyACM0")
+        self.assertEqual(config.get("board"), "zedboard")
+        self.assertIn("local: config/gpgpu/local.example.toml", config.provenance_for("board").source)
         self.assertIn("local: config/gpgpu/local.example.toml", config.provenance_for("board.port").source)
         self.assertTrue((ROOT / "config" / "gpgpu" / "local.example.toml").exists())
         gitignore = (ROOT / ".gitignore").read_text()
@@ -104,12 +107,25 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertFalse((config_root / "components.toml").exists())
         self.assertTrue((config_root / "board_types" / "zynq7000-zedboard.toml").exists())
         self.assertFalse((config_root / "platforms").exists())
+        self.assertTrue((config_root / "profiles" / "zed-demo.toml").exists())
+        self.assertFalse((config_root / "profiles.toml").exists())
 
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("board_type"), "zynq7000-zedboard")
+        self.assertEqual(config.get("board"), "zedboard")
         self.assertEqual(config.get("fpga.part"), "xc7z020clg484-1")
         with self.assertRaisesRegex(ConfigError, "Unknown setting"):
             config.get("platform")
+
+    def test_kernel_calls_stays_for_future_kernel_run(self):
+        config = ConfigResolver().resolve(set_values=["kernel.kernel_calls=3"])
+        self.assertEqual(config.get("kernel.kernel_calls"), 3)
+        node = Planner(config).plan("hw.board.kernel.run").root
+        self.assertIn(("kernel.kernel_calls", 3), node.params)
+
+    def test_no_fake_test_settings_are_added_yet(self):
+        with self.assertRaisesRegex(ConfigError, "Unknown setting"):
+            ConfigResolver().resolve(set_values=["test.rtl.simulator=iverilog"])
 
     def test_identical_dependency_instances_are_deduplicated(self):
         plan = self.make_planner("backend=fpga-uart").plan("demo.run")

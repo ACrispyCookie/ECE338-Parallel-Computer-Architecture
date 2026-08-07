@@ -15,8 +15,5 @@ name = "nbody-3d"
 [defaults.demo]
 name = "nbody-3d"
 
-[defaults.board]
-name = "lab-zed"
-
 [defaults.kernel]
 kernel_calls = 1
