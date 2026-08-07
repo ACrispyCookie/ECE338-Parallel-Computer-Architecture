@@ -56,14 +56,14 @@ GOALS: dict[str, GoalDefinition] = {
         kind="artifact",
         public=False,
         description="Internal mock Vivado project artifact.",
-        artifact_params=("architecture", "platform", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part"),
+        artifact_params=("architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part"),
     ),
     "hw.board.bitstream": GoalDefinition(
         goal_id="hw.board.bitstream",
         kind="artifact",
         public=True,
         description="Build a programmable-logic bitstream.",
-        artifact_params=("architecture", "platform", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"),
+        artifact_params=("architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"),
     ),
     "hw.board.program": GoalDefinition(
         goal_id="hw.board.program",

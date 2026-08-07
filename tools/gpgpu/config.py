@@ -50,7 +50,7 @@ class ConfigResolver:
 
     SCHEMA: dict[str, SettingSpec] = {
         "architecture": SettingSpec("architecture", "str", "gpgpu32", "shared"),
-        "platform": SettingSpec("platform", "str", "zynq7000-zedboard", "shared"),
+        "board_type": SettingSpec("board_type", "str", "zynq7000-zedboard", "shared"),
         "board": SettingSpec("board", "str", "lab-zed", "machine-local"),
         "program": SettingSpec("program", "str", "nbody", "shared"),
         "demo": SettingSpec("demo", "str", "nbody", "shared"),
@@ -63,7 +63,7 @@ class ConfigResolver:
         "rtl.imem_words": SettingSpec("rtl.imem_words", "int", 2048, "artifact"),
         "rtl.dmem_words": SettingSpec("rtl.dmem_words", "int", 2048, "artifact"),
         "fpga.synth.strategy": SettingSpec("fpga.synth.strategy", "str", "default", "artifact"),
-        "fpga.part": SettingSpec("fpga.part", "str", "xc7z020", "artifact"),
+        "fpga.part": SettingSpec("fpga.part", "str", "xc7z020clg484-1", "artifact"),
         "board.configure_policy": SettingSpec("board.configure_policy", "enum:if-needed,always,never", "if-needed", "runtime"),
         "kernel.load_policy": SettingSpec("kernel.load_policy", "enum:if-needed,always,never", "if-needed", "runtime"),
         "kernel.kernel_calls": SettingSpec("kernel.kernel_calls", "int", 1, "runtime"),
@@ -103,7 +103,7 @@ class ConfigResolver:
         for key, spec in self.SCHEMA.items():
             self._assign(values, provenance, key, spec.default, "schema default")
 
-        self._apply_defaults_file(values, provenance, self.config_root / "components.toml", "defaults")
+        self._apply_defaults_file(values, provenance, self.config_root / "defaults.toml", "defaults")
 
         profile_mapping: dict[str, Any] | None = None
         profile_source: str | None = None
@@ -112,7 +112,7 @@ class ConfigResolver:
             self._apply_mapping(values, provenance, profile_mapping, profile_source)
 
         self._apply_selected_manifest(values, provenance, "architecture", "architectures")
-        self._apply_selected_manifest(values, provenance, "platform", "platforms")
+        self._apply_selected_manifest(values, provenance, "board_type", "board_types")
         self._apply_selected_manifest(values, provenance, "program", "programs")
         self._apply_selected_manifest(values, provenance, "demo", "demos")
 
@@ -161,9 +161,9 @@ class ConfigResolver:
     def _apply_local(self, values: dict[str, Any], provenance: dict[str, Provenance]) -> None:
         local = self.config_root / "local.toml"
         if local.exists():
-            self._apply_defaults_file(values, provenance, local, "defaults")
+            self._apply_defaults_file(values, provenance, local, "defaults", source_prefix="local: ")
             return
-        self._apply_defaults_file(values, provenance, self.config_root / "local.example.toml", "defaults", required=False)
+        self._apply_defaults_file(values, provenance, self.config_root / "local.example.toml", "defaults", required=False, source_prefix="local: ")
 
     def _apply_defaults_file(
         self,
@@ -173,6 +173,7 @@ class ConfigResolver:
         section: str,
         *,
         required: bool = False,
+        source_prefix: str = "",
     ) -> None:
         if not path.exists():
             if required:
@@ -182,7 +183,7 @@ class ConfigResolver:
         mapping = data.get(section, {})
         if not isinstance(mapping, dict):
             raise ConfigError(f"{self._source_path(path)}:{section} must be a table")
-        self._apply_mapping(values, provenance, self._flatten(mapping), f"{self._source_path(path)}:{section}")
+        self._apply_mapping(values, provenance, self._flatten(mapping), f"{source_prefix}{self._source_path(path)}:{section}")
 
     def _apply_mapping(
         self,
@@ -197,7 +198,7 @@ class ConfigResolver:
     def _normalize_key(self, key: str) -> str:
         aliases = {
             "architecture.name": "architecture",
-            "platform.name": "platform",
+            "board_type.name": "board_type",
             "board.name": "board",
             "program.name": "program",
             "demo.name": "demo",

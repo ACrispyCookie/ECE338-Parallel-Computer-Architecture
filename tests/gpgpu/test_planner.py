@@ -66,6 +66,7 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_file_backed_profile_loads_with_provenance(self):
         config = ConfigResolver().resolve(profile="zed-demo", set_values=["demo.fps=30"])
         self.assertEqual(config.get("program"), "nbody-3d")
+        self.assertEqual(config.get("board_type"), "zynq7000-zedboard")
         self.assertEqual(config.get("backend"), "fpga-uart")
         self.assertEqual(config.get("demo.dataset"), "rings")
         self.assertIn("config/gpgpu/profiles.toml:profiles.zed-demo", config.provenance_for("backend").source)
@@ -91,10 +92,24 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_local_board_config_is_optional_and_gitignored(self):
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("board.port"), "/dev/ttyACM0")
-        self.assertIn("local.example.toml", config.provenance_for("board.port").source)
+        self.assertIn("local: config/gpgpu/local.example.toml", config.provenance_for("board.port").source)
         self.assertTrue((ROOT / "config" / "gpgpu" / "local.example.toml").exists())
         gitignore = (ROOT / ".gitignore").read_text()
         self.assertIn("config/gpgpu/local.toml", gitignore)
+        self.assertIn("docs/migration/CONFIGURATION.md", gitignore)
+
+    def test_approved_config_cleanup_shape(self):
+        config_root = ROOT / "config" / "gpgpu"
+        self.assertTrue((config_root / "defaults.toml").exists())
+        self.assertFalse((config_root / "components.toml").exists())
+        self.assertTrue((config_root / "board_types" / "zynq7000-zedboard.toml").exists())
+        self.assertFalse((config_root / "platforms").exists())
+
+        config = ConfigResolver().resolve(profile="zed-demo")
+        self.assertEqual(config.get("board_type"), "zynq7000-zedboard")
+        self.assertEqual(config.get("fpga.part"), "xc7z020clg484-1")
+        with self.assertRaisesRegex(ConfigError, "Unknown setting"):
+            config.get("platform")
 
     def test_identical_dependency_instances_are_deduplicated(self):
         plan = self.make_planner("backend=fpga-uart").plan("demo.run")
@@ -167,6 +182,7 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertIn("Configuration provenance", stdout.getvalue())
         self.assertIn("demo.fps", stdout.getvalue())
         self.assertIn("CLI --set", stdout.getvalue())
+        self.assertIn("local: config/gpgpu/local.example.toml", stdout.getvalue())
 
     def test_local_wrapper_cli_executes_list(self):
         import subprocess

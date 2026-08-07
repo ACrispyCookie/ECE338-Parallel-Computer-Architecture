@@ -1,6 +1,0 @@
-# Portable platform defaults for the ZedBoard/Zynq-7000 target.
-[defaults.platform]
-name = "zynq7000-zedboard"
-
-[defaults.fpga]
-part = "xc7z020"

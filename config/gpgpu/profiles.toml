@@ -5,7 +5,7 @@ backend = "fpga-uart"
 [profiles.zed-demo.architecture]
 name = "gpgpu32"
 
-[profiles.zed-demo.platform]
+[profiles.zed-demo.board_type]
 name = "zynq7000-zedboard"
 
 [profiles.zed-demo.board]

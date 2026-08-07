@@ -6,7 +6,7 @@ toolchain = "riscv-gcc-rv32im-ilp32"
 [defaults.architecture]
 name = "gpgpu32"
 
-[defaults.platform]
+[defaults.board_type]
 name = "zynq7000-zedboard"
 
 [defaults.program]

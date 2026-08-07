@@ -8,3 +8,4 @@ venv/
 __pycache__
 SSOT.md
 config/gpgpu/local.toml
+docs/migration/CONFIGURATION.md
