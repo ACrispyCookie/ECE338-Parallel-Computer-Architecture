@@ -58,11 +58,11 @@ Implemented in commit `c9c764d` on branch `gpgpu-planner-foundation`.
 
 Added migration records under `docs/migration/` and renamed initial goal identifiers to accepted hierarchical names such as `hw.board.bitstream`, `hw.rtl.assemble`, and `sw.program.native`.
 
-## Current implementation scope
-
 ### Milestone 2: file-backed manifests and local CLI wrapper
 
 Objective: move selected entities, profiles, and machine-local defaults out of `tools/gpgpu/config.py` into repo-owned TOML files while preserving current planner behavior.
+
+Implemented in commit `8d4c0f1` on branch `gpgpu-planner-foundation`.
 
 Files expected to change:
 
@@ -101,18 +101,75 @@ Expected evidence:
 - local board config is optional and gitignored;
 - `tools/gpgpu/gpgpu` works as a local wrapper.
 
-Commit policy: make and verify the changes, then stop with an uncommitted diff for approval before committing.
+Commit policy was satisfied: changes were reviewed, tested, then committed after approval.
+
+### Milestone 4: clarify planner config naming
+
+Implemented in commits `8ba72eb` and `d7637de` on branch `gpgpu-planner-foundation`.
+
+Added/changed:
+
+- `platform` config concept renamed to `board_type`;
+- `components.toml` renamed to `defaults.toml`;
+- board type manifests moved under `config/gpgpu/board_types/`;
+- profiles moved under `config/gpgpu/profiles/<name>.toml`;
+- local board instance defaults renamed from `lab-zed` to `zedboard`;
+- local-origin settings are marked in `gpgpu explain` provenance;
+- `kernel.kernel_calls` retained for future `hw.board.kernel.run` use;
+- fake test settings remain rejected until real test behavior exists.
+
+No existing legacy workflow was modified.
+
+## Current implementation scope
+
+### Milestone 5: richer mock planner output
+
+Objective: enrich `gpgpu plan` and `gpgpu explain` with compact display-only metadata while preserving graph construction and avoiding fake implementation details.
+
+Files expected to change:
+
+- `tools/gpgpu/goals.py`
+- `tools/gpgpu/planner.py`
+- `tools/gpgpu/cli.py`
+- `tests/gpgpu/test_planner.py`
+- `docs/migration/PLAN.md`
+
+Non-goals:
+
+- no `gpgpu run`;
+- no real Vivado, UART, compiler, RTL simulation, or demo execution;
+- no artifact cache or artifact injection;
+- no fake output paths, fake commands, fake test settings, or test manifests;
+- no config architecture changes;
+- no legacy-script rename/deletion;
+- no aliases.
+
+Expected evidence:
+
+- default `plan` output stays compact;
+- `-v`/`--verbose` prints expected outputs, side effects, lifecycle, and backend include/omit notes;
+- `explain -v` prints artifact identities;
+- explanatory metadata does not alter graph shape or artifact identities;
+- fake backend still omits hardware dependencies;
+- FPGA backend still includes hardware-load dependencies;
+- full planner test suite passes.
+
+Risk guardrails:
+
+- metadata is display-only and must not drive dependency selection;
+- metadata must use generic categories only, not fabricated paths or implementation claims;
+- tests should check stable phrases, not exact paragraph formatting;
+- no settings are added unless tied to current planned behavior.
 
 ## Intended next milestones
 
-1. Review and commit Milestone 2 if approved.
-2. Add planner output details: expected outputs, side effects, service lifecycle, and omitted conditional dependencies.
-3. Add characterization tests for legacy help and dry-run behavior.
-4. Add compatibility wrapper for one small non-hardware workflow.
-5. Connect program/toolchain goals behind adapters only after characterization.
-6. Connect RTL test goals behind adapters only after characterization.
-7. Connect UART/board action goals behind explicit hardware-state policies.
-8. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
+1. Complete Milestone 5 richer mock planner output.
+2. Add characterization tests for legacy help and dry-run behavior.
+3. Add compatibility wrapper for one small non-hardware workflow.
+4. Connect program/toolchain goals behind adapters only after characterization.
+5. Connect RTL test goals behind adapters only after characterization.
+6. Connect UART/board action goals behind explicit hardware-state policies.
+7. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
 
 ## Rollback
 

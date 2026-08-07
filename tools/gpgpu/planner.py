@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .config import ResolvedConfig
 from .goals import GOALS, GoalDefinition
@@ -10,6 +10,13 @@ from .goals import GOALS, GoalDefinition
 
 class PlanError(ValueError):
     """Raised when a goal graph cannot be planned."""
+
+
+@dataclass(frozen=True)
+class PlanNote:
+    kind: str
+    subject: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -23,6 +30,8 @@ class GoalInstance:
     description: str
     lifecycle: str | None = None
     dependencies: tuple[str, ...] = ()
+    expected_outputs: tuple[str, ...] = ()
+    side_effects: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -33,6 +42,7 @@ class GoalInstance:
 class Plan:
     root: GoalInstance
     nodes: list[GoalInstance]
+    notes: tuple[PlanNote, ...] = ()
 
     def require_instance(self, goal_id: str) -> GoalInstance:
         matches = [node for node in self.nodes if node.goal_id == goal_id]
@@ -42,7 +52,7 @@ class Plan:
             raise PlanError(f"Plan contains multiple instances for {goal_id}")
         return matches[0]
 
-    def format_plan(self) -> str:
+    def format_plan(self, *, verbose: bool = False) -> str:
         lines: list[str] = []
         for node in self.nodes:
             label = {
@@ -53,13 +63,39 @@ class Plan:
             }[node.kind]
             cache = " cacheable" if node.cacheable else ""
             lines.append(f"{label:<8} {node.goal_id}{format_params(node.params)}{cache}")
+            if verbose:
+                lines.extend(_format_node_metadata(node))
+        if verbose and self.notes:
+            if lines:
+                lines.append("")
+            for note in self.notes:
+                lines.append(f"{note.kind.upper():<8} {note.subject}")
+                lines.append(f"         reason: {note.reason}")
         return "\n".join(lines)
 
-    def format_explain(self, config: ResolvedConfig) -> str:
-        lines = [self.format_plan(), "", "Configuration provenance:"]
+    def format_explain(self, config: ResolvedConfig, *, verbose: bool = False) -> str:
+        lines = [self.format_plan(verbose=verbose)]
+        if verbose:
+            artifact_nodes = [node for node in self.nodes if node.kind == "artifact"]
+            if artifact_nodes:
+                lines.extend(["", "Artifact identities:"])
+                for node in artifact_nodes:
+                    lines.append(f"  {node.goal_id:<24} {node.identity}")
+        lines.extend(["", "Configuration provenance:"])
         for key, value, source in config.normalized_items():
             lines.append(f"  {key:<28} {str(value):<24} {source}")
         return "\n".join(lines)
+
+
+def _format_node_metadata(node: GoalInstance) -> list[str]:
+    lines: list[str] = []
+    if node.expected_outputs:
+        lines.append(f"         outputs: {', '.join(node.expected_outputs)}")
+    if node.side_effects:
+        lines.append(f"         side effects: {', '.join(node.side_effects)}")
+    if node.lifecycle:
+        lines.append(f"         lifecycle: {node.lifecycle}")
+    return lines
 
 
 def instance_key(goal_id: str, params: tuple[tuple[str, object], ...]) -> str:
@@ -77,6 +113,7 @@ class Planner:
     def __init__(self, config: ResolvedConfig):
         self.config = config
         self._instances: dict[str, GoalInstance] = {}
+        self._notes: list[PlanNote] = []
 
     def list_goals(self, *, include_internal: bool = False) -> list[GoalDefinition]:
         goals = [goal for goal in GOALS.values() if include_internal or goal.public]
@@ -86,9 +123,10 @@ class Planner:
         if goal_id not in GOALS:
             raise PlanError(f"Unknown goal: {goal_id}")
         self._instances = {}
+        self._notes = []
         root = self._require(goal_id)
         ordered = self._topological(root)
-        return Plan(root=root, nodes=ordered)
+        return Plan(root=root, nodes=ordered, notes=tuple(self._notes))
 
     def _require(self, goal_id: str) -> GoalInstance:
         definition = GOALS[goal_id]
@@ -114,6 +152,8 @@ class Planner:
             description=definition.description,
             lifecycle=definition.lifecycle,
             dependencies=dependency_keys,
+            expected_outputs=definition.expected_outputs,
+            side_effects=definition.side_effects,
         )
         self._instances[key] = instance
         return instance
@@ -138,8 +178,22 @@ class Planner:
         if goal_id == "demo.run":
             backend = self.config.get("backend")
             if backend == "fake":
+                self._notes.append(
+                    PlanNote(
+                        kind="omitted",
+                        subject="hw.board.bitstream, hw.board.program, hw.board.kernel.load",
+                        reason="backend=fake uses native reference path",
+                    )
+                )
                 return ("sw.program.native",)
             if backend == "fpga-uart":
+                self._notes.append(
+                    PlanNote(
+                        kind="included",
+                        subject="hw.board.kernel.load",
+                        reason="backend=fpga-uart requires hardware program-image load",
+                    )
+                )
                 # Requiring hw.board.kernel.load pulls in hw.board.program, hw.board.bitstream,
                 # and sw.program.image exactly once through normal deduplication.
                 return ("hw.board.kernel.load",)

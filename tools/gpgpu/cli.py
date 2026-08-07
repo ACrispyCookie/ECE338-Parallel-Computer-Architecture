@@ -40,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("goal")
         p.add_argument("--profile", default=None)
         p.add_argument("--set", dest="set_values", action="append", default=[])
+        p.add_argument("-v", "--verbose", action="store_true", help="Show full explanatory planner metadata")
 
     return parser
 
@@ -73,8 +74,8 @@ def format_goal_list(goals: list[GoalDefinition], *, color: bool) -> str:
     return "\n".join(lines)
 
 
-def format_plan(plan: Plan, *, color: bool) -> str:
-    text = plan.format_plan()
+def format_plan(plan: Plan, *, color: bool, verbose: bool = False) -> str:
+    text = plan.format_plan(verbose=verbose)
     if not color:
         return text
     replacements = {
@@ -109,18 +110,21 @@ def main(argv: list[str] | None = None) -> int:
         plan = Planner(config).plan(args.goal)
 
         if args.command == "plan":
-            print(format_plan(plan, color=color))
+            print(format_plan(plan, color=color, verbose=args.verbose))
             return 0
 
         if args.command == "explain":
             if color:
-                print(format_plan(plan, color=True))
-                print()
-                print(paint("Configuration provenance:", COLORS["heading"], True))
-                for key, value, source in config.normalized_items():
-                    print(f"  {key:<28} {str(value):<24} {paint(source, DIM, True)}")
+                rendered = plan.format_explain(config, verbose=args.verbose)
+                lines = []
+                for line in rendered.splitlines():
+                    if line in ("Artifact identities:", "Configuration provenance:"):
+                        lines.append(paint(line, COLORS["heading"], True))
+                    else:
+                        lines.append(line)
+                print("\n".join(lines))
             else:
-                print(plan.format_explain(config))
+                print(plan.format_explain(config, verbose=args.verbose))
             return 0
 
         parser.error(f"Unknown command: {args.command}")

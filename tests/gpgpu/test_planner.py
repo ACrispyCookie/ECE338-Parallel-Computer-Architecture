@@ -177,6 +177,50 @@ class PlannerFoundationTests(unittest.TestCase):
         second = self.make_planner("backend=fpga-uart").plan("demo.run").format_plan()
         self.assertEqual(first, second)
 
+    def test_default_plan_output_stays_compact(self):
+        rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan()
+        self.assertIn("BUILD", rendered)
+        self.assertNotIn("outputs:", rendered)
+        self.assertNotIn("side effects:", rendered)
+        self.assertNotIn("INCLUDED", rendered)
+
+    def test_verbose_plan_shows_outputs_side_effects_and_lifecycle(self):
+        rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan(verbose=True)
+        self.assertIn("outputs: bitstream artifact", rendered)
+        self.assertIn("outputs: instruction-memory image artifact", rendered)
+        self.assertIn("side effects: configure selected board FPGA fabric", rendered)
+        self.assertIn("side effects: load selected program image into board memory", rendered)
+        self.assertIn("lifecycle: long-running", rendered)
+
+    def test_verbose_plan_reports_backend_dependency_notes(self):
+        fake = ConfigResolver().resolve(set_values=["backend=fake", "demo=nbody-3d"])
+        fake_plan = Planner(fake).plan("demo.run")
+        fake_rendered = fake_plan.format_plan(verbose=True)
+        self.assertIn("OMITTED", fake_rendered)
+        self.assertIn("backend=fake uses native reference path", fake_rendered)
+        self.assertIn("hw.board.bitstream", fake_rendered)
+        self.assertNotIn("hw.board.bitstream", {node.goal_id for node in fake_plan.nodes})
+
+        fpga_rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan(verbose=True)
+        self.assertIn("INCLUDED", fpga_rendered)
+        self.assertIn("backend=fpga-uart requires hardware program-image load", fpga_rendered)
+
+    def test_verbose_explain_shows_artifact_identities(self):
+        config = ConfigResolver().resolve(profile="zed-demo")
+        rendered = Planner(config).plan("demo.run").format_explain(config, verbose=True)
+        self.assertIn("Artifact identities:", rendered)
+        self.assertIn("hw.board.bitstream", rendered)
+        self.assertIn("sw.program.image", rendered)
+
+    def test_rendering_metadata_does_not_change_artifact_identity(self):
+        config = ConfigResolver().resolve(profile="zed-demo")
+        plan = Planner(config).plan("demo.run")
+        node = plan.require_instance("hw.board.bitstream")
+        identity_before = node.identity
+        plan.format_plan(verbose=True)
+        plan.format_explain(config, verbose=True)
+        self.assertEqual(identity_before, plan.require_instance("hw.board.bitstream").identity)
+
     def test_cli_list_plan_and_explain(self):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
@@ -233,6 +277,21 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertNotIn("\x1b[", rendered)
         self.assertIn("BUILD", rendered)
         self.assertIn("SERVICE", rendered)
+
+    def test_cli_verbose_flag_enables_full_plan_output(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["--color", "never", "plan", "demo.run", "--profile", "zed-demo", "--verbose"])
+        self.assertEqual(code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("outputs: bitstream artifact", rendered)
+        self.assertIn("side effects: configure selected board FPGA fabric", rendered)
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["--color", "never", "explain", "demo.run", "--profile", "zed-demo", "-v"])
+        self.assertEqual(code, 0)
+        self.assertIn("Artifact identities:", stdout.getvalue())
 
 
 if __name__ == "__main__":
