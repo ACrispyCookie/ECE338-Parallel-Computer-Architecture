@@ -179,18 +179,21 @@ class PlannerFoundationTests(unittest.TestCase):
 
     def test_default_plan_output_stays_compact(self):
         rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan()
+        self.assertIn("Plan: demo.run", rendered)
+        self.assertIn("◇ 01.", rendered)
         self.assertIn("BUILD", rendered)
-        self.assertNotIn("outputs:", rendered)
-        self.assertNotIn("side effects:", rendered)
+        self.assertIn("+", rendered)
+        self.assertNotIn("↳ outputs", rendered)
+        self.assertNotIn("↳ effects", rendered)
         self.assertNotIn("INCLUDED", rendered)
 
     def test_verbose_plan_shows_outputs_side_effects_and_lifecycle(self):
         rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan(verbose=True)
-        self.assertIn("outputs: bitstream artifact", rendered)
-        self.assertIn("outputs: instruction-memory image artifact", rendered)
-        self.assertIn("side effects: configure selected board FPGA fabric", rendered)
-        self.assertIn("side effects: load selected program image into board memory", rendered)
-        self.assertIn("lifecycle: long-running", rendered)
+        self.assertIn("↳ outputs      bitstream artifact", rendered)
+        self.assertIn("↳ outputs      instruction-memory image artifact", rendered)
+        self.assertIn("↳ effects      configure selected board FPGA fabric", rendered)
+        self.assertIn("↳ effects      load selected program image into board memory", rendered)
+        self.assertIn("↳ lifecycle    long-running", rendered)
 
     def test_verbose_plan_reports_backend_dependency_notes(self):
         fake = ConfigResolver().resolve(set_values=["backend=fake", "demo=nbody-3d"])
@@ -202,6 +205,7 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertNotIn("hw.board.bitstream", {node.goal_id for node in fake_plan.nodes})
 
         fpga_rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan(verbose=True)
+        self.assertIn("Notes:", fpga_rendered)
         self.assertIn("INCLUDED", fpga_rendered)
         self.assertIn("backend=fpga-uart requires hardware program-image load", fpga_rendered)
 
@@ -284,8 +288,8 @@ class PlannerFoundationTests(unittest.TestCase):
             code = main(["--color", "never", "plan", "demo.run", "--profile", "zed-demo", "--verbose"])
         self.assertEqual(code, 0)
         rendered = stdout.getvalue()
-        self.assertIn("outputs: bitstream artifact", rendered)
-        self.assertIn("side effects: configure selected board FPGA fabric", rendered)
+        self.assertIn("↳ outputs      bitstream artifact", rendered)
+        self.assertIn("↳ effects      configure selected board FPGA fabric", rendered)
 
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):

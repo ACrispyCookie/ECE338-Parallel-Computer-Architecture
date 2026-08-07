@@ -53,24 +53,32 @@ class Plan:
         return matches[0]
 
     def format_plan(self, *, verbose: bool = False) -> str:
-        lines: list[str] = []
-        for node in self.nodes:
+        lines: list[str] = [f"Plan: {self.root.goal_id} ({len(self.nodes)} goals)"]
+        for index, node in enumerate(self.nodes, start=1):
             label = {
                 "artifact": "BUILD",
                 "action": "ACTION",
                 "service": "SERVICE",
                 "check": "CHECK",
             }[node.kind]
+            marker = {
+                "artifact": "◇",
+                "action": "⚡",
+                "service": "◆",
+                "check": "✓",
+            }[node.kind]
             cache = " cacheable" if node.cacheable else ""
-            lines.append(f"{label:<8} {node.goal_id}{format_params(node.params)}{cache}")
+            params = format_params(node.params, verbose=verbose)
+            lines.append(f"{label:<8} {marker} {index:02d}. {node.goal_id:<24} {params}{cache}".rstrip())
             if verbose:
                 lines.extend(_format_node_metadata(node))
         if verbose and self.notes:
             if lines:
                 lines.append("")
+            lines.append("Notes:")
             for note in self.notes:
-                lines.append(f"{note.kind.upper():<8} {note.subject}")
-                lines.append(f"         reason: {note.reason}")
+                lines.append(f"  {note.kind.upper():<8} {note.subject}")
+                lines.append(f"           reason: {note.reason}")
         return "\n".join(lines)
 
     def format_explain(self, config: ResolvedConfig, *, verbose: bool = False) -> str:
@@ -90,11 +98,11 @@ class Plan:
 def _format_node_metadata(node: GoalInstance) -> list[str]:
     lines: list[str] = []
     if node.expected_outputs:
-        lines.append(f"         outputs: {', '.join(node.expected_outputs)}")
+        lines.append(f"           ↳ outputs      {', '.join(node.expected_outputs)}")
     if node.side_effects:
-        lines.append(f"         side effects: {', '.join(node.side_effects)}")
+        lines.append(f"           ↳ effects      {', '.join(node.side_effects)}")
     if node.lifecycle:
-        lines.append(f"         lifecycle: {node.lifecycle}")
+        lines.append(f"           ↳ lifecycle    {node.lifecycle}")
     return lines
 
 
@@ -102,10 +110,13 @@ def instance_key(goal_id: str, params: tuple[tuple[str, object], ...]) -> str:
     return goal_id + json.dumps(params, sort_keys=True, separators=(",", ":"))
 
 
-def format_params(params: tuple[tuple[str, object], ...]) -> str:
+def format_params(params: tuple[tuple[str, object], ...], *, verbose: bool = False) -> str:
     if not params:
         return ""
-    body = ", ".join(f"{key}={value}" for key, value in params)
+    shown = params if verbose else params[:3]
+    body = ", ".join(f"{key}={value}" for key, value in shown)
+    if not verbose and len(params) > len(shown):
+        body = f"{body}, +{len(params) - len(shown)} params"
     return f"[{body}]"
 
 
