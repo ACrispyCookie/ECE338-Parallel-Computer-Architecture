@@ -175,31 +175,26 @@ Evidence:
 - native adapter does not run the program or create `data.csv`;
 - planner, legacy characterization, executor, and full discovery tests pass.
 
-## Current implementation scope
+## Completed structural milestone
 
 ### Milestone 8: split hardware/software trees and introduce `out/`
 
 Objective: establish the repository domain layout before adding more workflow adapters.
 
-Scope:
+Implemented in commit `1019b8d` on branch `gpgpu-planner-foundation`.
 
-- move RTL from `src/` to `hw/rtl/`;
-- move host code from `host/` to `sw/host/`;
-- move program code from `programs/` to `sw/programs/`;
-- delete stale `host/linux/host.py` with explicit user approval;
-- keep `test/` in place for now;
-- keep `tools/`, `demo/`, `config/`, and `docs/` as top-level roots;
-- introduce ignored `out/` with tracked `out/.gitkeep`.
+Added/changed:
 
-Non-goals:
+- moved RTL from `src/` to `hw/rtl/`;
+- moved host code from `host/` to `sw/host/`;
+- moved program code from `programs/` to `sw/programs/`;
+- deleted stale `host/linux/host.py` with explicit user approval;
+- kept `test/` in place for now;
+- kept `tools/`, `demo/`, `config/`, and `docs/` as top-level roots;
+- introduced ignored `out/` with tracked `out/.gitkeep`;
+- moved hardware generated-artifact ignore rules to `hw/.gitignore`.
 
-- no test-to-tests migration yet;
-- no docs history rewrite yet;
-- no compatibility shims for removed root `programs/`, `host/`, or `src/` paths;
-- no generated artifact migration into `out/` yet;
-- no Vivado, UART, or RISC-V compiler execution.
-
-Expected evidence:
+Evidence:
 
 - domain-layout test proves `hw/rtl`, `sw/host/baremetal`, `sw/programs`, and `out/.gitkeep` exist;
 - old root `src`, `host`, and `programs` paths are gone;
@@ -208,11 +203,102 @@ Expected evidence:
 - native adapter invokes `make -C sw/programs ...`;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
+## Current implementation scope
+
+### Milestone 9: RISC-V ELF compatibility adapter
+
+Objective: add the next narrow `gpgpu run` compatibility adapter for the existing RISC-V ELF build artifact.
+
+Scope:
+
+- support `tools/gpgpu/gpgpu run sw.program.elf --set program=<program>`;
+- delegate to `make -C sw/programs PROG=<program> <program>/<program>.elf`;
+- verify the legacy ELF artifact at `sw/programs/<program>/<program>.elf`;
+- keep `sw.program.image` and hardware/demo goals unsupported by the executor;
+- document the current config/Makefile mismatch for `program.optimization`, `program.march`, and `program.mabi`.
+
+Non-goals:
+
+- no Makefile rewrite;
+- no ELF/MAP relocation into `out/` yet;
+- no instruction-memory image adapter yet;
+- no UART, hardware, Vivado, or demo execution;
+- no caching or artifact injection.
+
+Expected evidence:
+
+- ELF adapter reports the exact legacy Make command;
+- ELF adapter produces `sw/programs/nbody/nbody.elf`;
+- unsupported `sw.program.image` still fails clearly;
+- native adapter behavior is unchanged;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Future `executor.py` direction
+
+The executor should stay small while adapters are few, but it must not grow into a long unstructured `if goal_id == ...` chain.
+
+Near-term direction:
+
+- keep `executor.py` as a thin coordinator;
+- introduce a tiny adapter registry when the next few adapters accumulate;
+- keep one adapter per explicitly characterized workflow;
+- keep unsupported goals failing clearly until they have adapters.
+
+Medium-term direction:
+
+```text
+tools/gpgpu/executor.py
+tools/gpgpu/adapters/
+  __init__.py
+  sw_programs.py
+  hw_rtl.py
+  hw_board.py
+  demo.py
+```
+
+`executor.py` should own generic execution concerns: adapter lookup, repository root, subprocess execution, stdout/stderr capture, result formatting, error handling, and later dry-run/force/verbosity/service lifecycle behavior.
+
+Domain adapter modules should own command construction and artifact verification for their area.
+
+Long-term direction: executor should walk a validated planned graph in dependency order, cache-skip only compatible artifact goals, never cache-skip action goals, and manage service lifecycles explicitly.
+
+## Future `config.py` direction
+
+`config.py` currently combines schema definition, TOML loading, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. That is acceptable for the foundation but should be split once the model stabilizes.
+
+Near-term rule:
+
+- do not add placeholder settings without real planner or adapter behavior;
+- document legacy mismatches instead of silently changing Makefile semantics;
+- keep unknown and type-invalid settings as immediate errors.
+
+Medium-term direction:
+
+```text
+tools/gpgpu/config/
+  __init__.py
+  schema.py
+  resolver.py
+  provenance.py
+  toml_loader.py
+  types.py
+```
+
+Responsibilities:
+
+- `schema.py`: known settings, types, scopes, defaults;
+- `resolver.py`: precedence order and selected-manifest application;
+- `provenance.py`: source labels and explain-format helpers;
+- `toml_loader.py`: TOML reading, flattening, validation;
+- `types.py`: enums, coercion helpers, typed values.
+
+Future decision: decide whether typed planner settings are passed into legacy Make, for example `OPT`, `MARCH`, and `MABI`, or whether new toolchain behavior moves to a new adapter-controlled build path. Defer this until after `sw.program.image` exposes the objdump and memory-format boundary.
+
 ## Intended next milestones
 
-1. Complete Milestone 8 domain layout split.
-2. Decide whether the next wrapper should target `sw.program.elf`, `sw.program.image`, or a native run/check goal.
-3. Connect program/toolchain goals behind adapters only after characterization.
+1. Complete Milestone 9 RISC-V ELF adapter.
+2. Add `sw.program.image` compatibility adapter after characterizing generated assembly and memory-image artifacts.
+3. Decide when generated program artifacts begin moving from `sw/programs/*` into `out/`.
 4. Connect RTL test goals behind adapters only after characterization.
 5. Connect UART/board action goals behind explicit hardware-state policies.
 6. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.

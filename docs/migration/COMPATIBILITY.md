@@ -64,6 +64,31 @@ Compatibility behavior:
 
 Known limitation: planner identity includes `program.optimization`, but the legacy native Makefile target currently uses `NATIVE_CFLAGS = -O2` and does not consume planner config. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
 
+## Milestone 9 RISC-V ELF compatibility adapter
+
+The next executable artifact adapter is also narrow:
+
+```bash
+tools/gpgpu/gpgpu run sw.program.elf --set program=nbody
+```
+
+It delegates to the legacy RISC-V ELF Makefile target instead of reimplementing toolchain flags:
+
+```bash
+make -C sw/programs PROG=nbody nbody/nbody.elf
+```
+
+Compatibility behavior:
+
+- produced artifact stays at the legacy path `sw/programs/<program>/<program>.elf`;
+- secondary linker map output may be produced at `sw/programs/<program>/<program>.map` by existing Makefile behavior;
+- no `out/` artifact is created;
+- the ELF is not run;
+- `sw.program.image` and other goals remain unsupported by the executor until their own adapter milestones;
+- legacy scripts and `sw/programs/Makefile` are not modified.
+
+Known limitation: planner identity includes `program.optimization`, `program.march`, and `program.mabi`, but the legacy RISC-V Makefile target currently hardcodes `-O2 -march=rv32im -mabi=ilp32`. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:

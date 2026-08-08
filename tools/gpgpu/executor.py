@@ -35,13 +35,40 @@ class Executor:
         self.repo_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[2]
 
     def run(self, goal_id: str) -> RunResult:
-        if goal_id != "sw.program.native":
-            raise ExecuteError(f"no executor adapter registered for {goal_id}")
-        return self._run_sw_program_native()
+        if goal_id == "sw.program.native":
+            return self._run_sw_program_native()
+        if goal_id == "sw.program.elf":
+            return self._run_sw_program_elf()
+        raise ExecuteError(f"no executor adapter registered for {goal_id}")
 
     def _run_sw_program_native(self) -> RunResult:
         program = str(self.config.get("program"))
         command = ("make", "-C", "sw/programs", f"PROG={program}", "x86")
+        return self._run_make_artifact(
+            goal_id="sw.program.native",
+            command=command,
+            produced=self.repo_root / "sw" / "programs" / program / f"{program}_x86",
+            require_executable=True,
+        )
+
+    def _run_sw_program_elf(self) -> RunResult:
+        program = str(self.config.get("program"))
+        command = ("make", "-C", "sw/programs", f"PROG={program}", f"{program}/{program}.elf")
+        return self._run_make_artifact(
+            goal_id="sw.program.elf",
+            command=command,
+            produced=self.repo_root / "sw" / "programs" / program / f"{program}.elf",
+            require_executable=False,
+        )
+
+    def _run_make_artifact(
+        self,
+        *,
+        goal_id: str,
+        command: tuple[str, ...],
+        produced: Path,
+        require_executable: bool,
+    ) -> RunResult:
         completed = subprocess.run(
             command,
             cwd=self.repo_root,
@@ -49,10 +76,11 @@ class Executor:
             capture_output=True,
             check=False,
         )
-        produced = self.repo_root / "sw" / "programs" / program / f"{program}_x86"
-        produced_tuple: tuple[Path, ...] = (produced,) if produced.exists() and os.access(produced, os.X_OK) else ()
+        exists = produced.exists()
+        usable = exists and (not require_executable or os.access(produced, os.X_OK))
+        produced_tuple: tuple[Path, ...] = (produced,) if usable else ()
         return RunResult(
-            goal_id="sw.program.native",
+            goal_id=goal_id,
             command=command,
             returncode=completed.returncode,
             produced=produced_tuple,
