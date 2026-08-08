@@ -12,6 +12,34 @@ No legacy command has been replaced yet.
 
 The planner foundation is mock-only and does not execute current workflows. Therefore no legacy-versus-new parity claim is made for execution behavior.
 
+## Milestone 6 safe characterization evidence
+
+These tests intentionally exercise only help/import/static behavior. They do not open UART devices, call Vivado, build programs, run compilers, or execute hardware flows.
+
+Automated characterization lives in:
+
+```text
+tests/legacy/test_legacy_cli_characterization.py
+```
+
+Covered entry points:
+
+- `./run.sh --help` exits 0 and exposes build targets, `--fpga`, `--kernel-calls`, and adapter-forwarding guidance.
+- `./programs/run.sh --help` exits 0 and has the same key generic workflow surface as the root wrapper.
+- `python3 programs/fpga_run.py --help` exits 0 and exposes common UART loop options: `--program`, `--adapter-help`, `--kernel-calls`, `--args-offset`, and `--skip-load-imem`.
+- `python3 test/host_uart_tester.py --help` exits 0 and exposes hardware test options: `--port`, `--dmem-words`, `--dmem-offset`, `--check-words`.
+- `host/baremetal/gpgpu_uart.py` imports without opening serial and remains the UART protocol reference for `DEPTH`, `PROMPT`, word normalization, memory-file reads, and RET trimming.
+
+Duplicated/shared UART and kernel-run observations before adapter work:
+
+- `host/baremetal/gpgpu_uart.py` owns the protocol implementation: prompt handling, status parsing, ASCII/binary IMEM/DMEM load/dump, `run`, and `done`.
+- `programs/fpga_run.py` imports that protocol layer and owns the common program FPGA loop: load IMEM once, adapter-provided DMEM initialization, GPGPU_ARGS normalization/write-if-changed, kernel run, DMEM dump, adapter output processing, and `done` per call.
+- `test/host_uart_tester.py` imports `DEPTH`, `GpgpuUartMonitor`, `read_mem_file`, and `trim_program_at_ret` from the protocol layer, but still owns a separate hardware-test loop for load/run/dump/compare/done.
+- The current shared ABI/runtime constants include `DEPTH=2048`, UART baud default `115200`, `GPU_ARGS_BASE_WORDS=0x40/4`, `GPU_ARGS_WORDS=4`, and `kernel_calls` handling in the common runner and program adapters.
+- Program adapters under `programs/*/fpga.py` each receive `kernel_calls`; `mandelbrot` adds stronger semantic constraints by requiring kernel calls to match frame/height-derived counts.
+
+Conclusion for future wrapper work: keep `host/baremetal/gpgpu_uart.py` as the protocol reference and treat `programs/fpga_run.py` plus `test/host_uart_tester.py` as behavior oracles. Do not extract or consolidate their loops until a wrapper/adaptor milestone compares command behavior against these characterization tests.
+
 ## Legacy workflows requiring characterization
 
 ### Program build and native run

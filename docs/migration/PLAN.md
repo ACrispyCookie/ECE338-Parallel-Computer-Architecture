@@ -120,13 +120,13 @@ Added/changed:
 
 No existing legacy workflow was modified.
 
-## Current implementation scope
-
 ### Milestone 5: richer mock planner output
 
 Objective: enrich `gpgpu plan` and `gpgpu explain` with compact display-only metadata while preserving graph construction and avoiding fake implementation details.
 
-Files expected to change:
+Implemented in commits `1d70211` and `71e0e2a` on branch `gpgpu-planner-foundation`.
+
+Files changed:
 
 - `tools/gpgpu/goals.py`
 - `tools/gpgpu/planner.py`
@@ -134,17 +134,7 @@ Files expected to change:
 - `tests/gpgpu/test_planner.py`
 - `docs/migration/PLAN.md`
 
-Non-goals:
-
-- no `gpgpu run`;
-- no real Vivado, UART, compiler, RTL simulation, or demo execution;
-- no artifact cache or artifact injection;
-- no fake output paths, fake commands, fake test settings, or test manifests;
-- no config architecture changes;
-- no legacy-script rename/deletion;
-- no aliases.
-
-Expected evidence:
+Evidence:
 
 - default `plan` output stays compact;
 - `-v`/`--verbose` prints expected outputs, side effects, lifecycle, and backend include/omit notes;
@@ -154,22 +144,44 @@ Expected evidence:
 - FPGA backend still includes hardware-load dependencies;
 - full planner test suite passes.
 
-Risk guardrails:
+## Current implementation scope
 
-- metadata is display-only and must not drive dependency selection;
-- metadata must use generic categories only, not fabricated paths or implementation claims;
-- tests should check stable phrases, not exact paragraph formatting;
-- no settings are added unless tied to current planned behavior.
+### Milestone 6: legacy workflow characterization
+
+Objective: add safe characterization tests for current legacy entry points before wrapping any real workflow in the new planner.
+
+Files expected to change:
+
+- `tests/legacy/test_legacy_cli_characterization.py`
+- `docs/migration/PLAN.md`
+- `docs/migration/COMPATIBILITY.md`
+
+Non-goals:
+
+- no legacy-script rename, move, rewrite, or deletion;
+- no `gpgpu run`;
+- no real Vivado, UART, compiler, RTL simulation, or demo execution;
+- no hardware access or serial-port opening;
+- no behavior fixes discovered during characterization.
+
+Expected evidence:
+
+- root `./run.sh --help` is characterized;
+- `programs/run.sh --help` is compared with the root wrapper surface;
+- `programs/fpga_run.py --help` is characterized;
+- `test/host_uart_tester.py --help` is characterized;
+- `host/baremetal/gpgpu_uart.py` imports without opening serial;
+- shared UART constants/helpers are recorded before adapter work;
+- duplicated UART/kernel-run logic findings are documented.
 
 ## Intended next milestones
 
-1. Complete Milestone 5 richer mock planner output.
-2. Add characterization tests for legacy help and dry-run behavior.
-3. Add compatibility wrapper for one small non-hardware workflow.
-4. Connect program/toolchain goals behind adapters only after characterization.
-5. Connect RTL test goals behind adapters only after characterization.
-6. Connect UART/board action goals behind explicit hardware-state policies.
-7. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
+1. Complete Milestone 6 legacy workflow characterization.
+2. Add compatibility wrapper for one small non-hardware workflow.
+3. Connect program/toolchain goals behind adapters only after characterization.
+4. Connect RTL test goals behind adapters only after characterization.
+5. Connect UART/board action goals behind explicit hardware-state policies.
+6. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
 
 ## Rollback
 
