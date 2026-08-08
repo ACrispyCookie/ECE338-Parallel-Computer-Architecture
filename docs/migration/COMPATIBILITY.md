@@ -159,12 +159,11 @@ out/artifacts/sw.program.image/nbody/<identity>/nbody_dump_real.asm
 Compatibility behavior:
 
 - `sw.program.native`, `sw.program.elf`, and `sw.program.image` still use `make -C sw/programs`;
-- artifact layout is owned by executor context, not by domain adapters;
+- artifact layout is owned by control-plane helpers, not by domain adapters;
 - Makefile accepts `OUT_DIR=<artifact-dir>` and exposes named `native`, `elf`, and `image` targets;
 - source inputs remain under `sw/programs/<program>/`;
 - generated software artifacts are no longer written to `sw/programs/<program>/` by `gpgpu run`;
-- no broad `make clean` is introduced;
-- no `gpgpu clean` command is implemented yet.
+- no broad `make clean` is introduced.
 
 Milestone 13 dependency-aware `gpgpu run` resolves that limitation for registered adapters:
 
@@ -213,6 +212,24 @@ Compatibility behavior:
 - artifact specs are intentionally not implemented in this milestone.
 
 The removal may change software artifact identity hashes because dependency identities participate in artifact identity. This is acceptable before persistent cache semantics exist and removes a misleading placeholder boundary.
+
+## Milestone 16 generic artifact layout and clean command
+
+Milestone 16 changes artifact directory layout and adds a conservative clean command.
+
+Compatibility behavior:
+
+- generated artifact directories now use `out/artifacts/<goal>/<identity>/`, not `out/artifacts/<goal>/<program>/<identity>/`;
+- `program` and other human-readable settings are recorded in `artifact.toml` instead of being universal path components;
+- `artifact.toml` is written after successful artifact goal execution and records goal, kind, identity, params, produced files, and dependency identities;
+- `gpgpu clean` deletes only normalized artifact directories under `out/artifacts/<goal>/<identity>/`;
+- `gpgpu clean` never deletes source-tree files and never calls `make clean`;
+- root-only clean supports artifact goals only;
+- `--deps` cleans artifact nodes in planner order and does not perform action/service/check lifecycle cleanup;
+- missing artifact directories are reported but are not errors;
+- broad paths, outside paths, and symlink artifact directories are refused.
+
+This layout change is expected to move existing generated software outputs if a user has stale artifacts from prior feature-branch milestones. Those stale directories can be removed manually because they are ignored output under `out/artifacts`.
 
 ## Milestone 8 layout split
 

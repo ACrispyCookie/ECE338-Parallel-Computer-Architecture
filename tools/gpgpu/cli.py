@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 
+from .cleaner import CleanError, Cleaner, format_clean_summary
 from .config import ConfigError, ConfigResolver
 from .executor import ExecuteError, Executor
 from .goals import GoalDefinition
@@ -54,6 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Run progress renderer: auto, plain, or tty (default: auto)",
     )
+
+    clean_parser = sub.add_parser("clean", help="Remove owned out/artifacts for a normalized goal instance")
+    clean_parser.add_argument("goal")
+    clean_parser.add_argument("--profile", default=None)
+    clean_parser.add_argument("--set", dest="set_values", action="append", default=[])
+    clean_parser.add_argument("--dry-run", action="store_true", help="Show paths that would be removed without deleting")
+    clean_parser.add_argument("--deps", action="store_true", help="Also clean artifact dependencies in the planned graph")
 
     return parser
 
@@ -151,9 +159,14 @@ def main(argv: list[str] | None = None) -> int:
             summary = Executor(config).run_plan(plan, reporter=reporter)
             return summary.returncode
 
+        if args.command == "clean":
+            summary = Cleaner().clean_plan(plan, deps=args.deps, dry_run=args.dry_run)
+            print(format_clean_summary(summary, dry_run=args.dry_run, deps=args.deps))
+            return 0
+
         parser.error(f"Unknown command: {args.command}")
         return 2
 
-    except (ConfigError, PlanError, ExecuteError) as exc:
+    except (ConfigError, PlanError, ExecuteError, CleanError) as exc:
         print(f"gpgpu: error: {exc}", file=sys.stderr)
         return 2

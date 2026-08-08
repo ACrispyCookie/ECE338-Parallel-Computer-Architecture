@@ -5,6 +5,7 @@ import io
 import os
 import shutil
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -40,6 +41,17 @@ class ExecutorStructureTests(unittest.TestCase):
         self.assertNotIn('"out"', adapter_source)
         self.assertNotIn('"artifacts"', adapter_source)
         self.assertNotIn("_artifact_dir", adapter_source)
+
+    def test_artifact_dir_helper_uses_goal_and_identity_without_program_component(self):
+        from tools.gpgpu.artifacts import artifact_dir
+
+        config = ConfigResolver().resolve(set_values=["program=nbody"])
+        node = Planner(config).plan("sw.program.elf").root
+
+        self.assertEqual(
+            artifact_dir(ROOT, node),
+            ROOT / "out" / "artifacts" / "sw.program.elf" / node.identity,
+        )
 
 
 class GraphRunTests(unittest.TestCase):
@@ -280,7 +292,7 @@ class ProgramAdapterTests(unittest.TestCase):
         self.dump_asm.unlink(missing_ok=True)
         self.mem.unlink(missing_ok=True)
         for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
-            shutil.rmtree(ROOT / "out" / "artifacts" / goal_id / self.program, ignore_errors=True)
+            shutil.rmtree(ROOT / "out" / "artifacts" / goal_id, ignore_errors=True)
 
     def require_native_tools(self):
         if shutil.which("make") is None:
@@ -295,9 +307,15 @@ class ProgramAdapterTests(unittest.TestCase):
             self.skipTest("riscv64-unknown-elf-gcc or riscv-none-elf-gcc is required for RISC-V compatibility adapter test")
 
     def artifact_dir(self, goal_id: str, *set_values: str) -> Path:
+        from tools.gpgpu.artifacts import artifact_dir
+
         config = ConfigResolver().resolve(set_values=[f"program={self.program}", *set_values])
-        identity = Planner(config).plan(goal_id).root.identity
-        return ROOT / "out" / "artifacts" / goal_id / self.program / identity
+        node = Planner(config).plan(goal_id).root
+        return artifact_dir(ROOT, node)
+
+    def metadata(self, out_dir: Path) -> dict:
+        with (out_dir / "artifact.toml").open("rb") as handle:
+            return tomllib.load(handle)
 
     def test_unsupported_run_goal_fails_clearly(self):
         stdout = io.StringIO()
@@ -333,8 +351,14 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertIn("[1/1] sw.program.native", rendered)
         self.assertIn("✓ sw.program.native", rendered)
         self.assertIn("produced nbody_x86", rendered)
-        self.assertIn(f"out/artifacts/sw.program.native/nbody/{out_dir.name}", rendered)
+        self.assertIn(f"out/artifacts/sw.program.native/{out_dir.name}", rendered)
+        self.assertNotIn(f"out/artifacts/sw.program.native/{self.program}/{out_dir.name}", rendered)
         self.assertTrue(out_native.exists())
+        metadata = self.metadata(out_dir)
+        self.assertEqual(metadata["goal"], "sw.program.native")
+        self.assertEqual(metadata["identity"], out_dir.name)
+        self.assertEqual(metadata["params"]["program"], self.program)
+        self.assertEqual(metadata["produced"]["files"], [f"{self.program}_x86"])
         self.assertTrue(os.access(out_native, os.X_OK))
         self.assertFalse(self.native_exe.exists())
 
@@ -370,9 +394,15 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertIn("[1/1] sw.program.elf", rendered)
         self.assertIn("✓ sw.program.elf", rendered)
         self.assertIn("produced nbody.elf, nbody.map", rendered)
-        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{out_dir.name}", rendered)
+        self.assertIn(f"out/artifacts/sw.program.elf/{out_dir.name}", rendered)
+        self.assertNotIn(f"out/artifacts/sw.program.elf/{self.program}/{out_dir.name}", rendered)
         self.assertTrue(out_elf.exists())
         self.assertTrue(out_map.exists())
+        metadata = self.metadata(out_dir)
+        self.assertEqual(metadata["goal"], "sw.program.elf")
+        self.assertEqual(metadata["identity"], out_dir.name)
+        self.assertEqual(metadata["params"]["program"], self.program)
+        self.assertEqual(metadata["produced"]["files"], [f"{self.program}.elf", f"{self.program}.map"])
         self.assertFalse(self.elf.exists())
         self.assertFalse(self.map_file.exists())
 
@@ -399,10 +429,20 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertIn("✓ sw.program.elf", rendered)
         self.assertIn("✓ sw.program.image", rendered)
         self.assertIn("produced nbody_instructions.mem, nbody_dump_real.asm", rendered)
-        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{elf_dir.name}", rendered)
-        self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}", rendered)
+        self.assertIn(f"out/artifacts/sw.program.elf/{elf_dir.name}", rendered)
+        self.assertIn(f"out/artifacts/sw.program.image/{out_dir.name}", rendered)
+        self.assertNotIn(f"out/artifacts/sw.program.image/{self.program}/{out_dir.name}", rendered)
         self.assertTrue(out_mem.exists())
         self.assertTrue(out_dump.exists())
+        metadata = self.metadata(out_dir)
+        self.assertEqual(metadata["goal"], "sw.program.image")
+        self.assertEqual(metadata["identity"], out_dir.name)
+        self.assertEqual(metadata["params"]["program"], self.program)
+        self.assertEqual(
+            metadata["produced"]["files"],
+            [f"{self.program}_instructions.mem", f"{self.program}_dump_real.asm"],
+        )
+        self.assertEqual(metadata["dependencies"]["sw.program.elf"], elf_dir.name)
         self.assertFalse(out_elf.exists())
         self.assertFalse(out_map.exists())
         self.assertFalse(self.elf.exists())

@@ -152,3 +152,20 @@ Accepted Milestone 15 direction:
 - Conditional demo dependencies are represented as backend conditions, not goal-specific planner branches.
 - `sw.program.compile_riscv` is removed as a planner goal because it does not currently own a distinct artifact boundary; `sw.program.elf` is the current RISC-V compile/link artifact boundary.
 - Artifact specs are intentionally deferred past Milestone 15.
+
+## Generic artifact layout and clean safety policy
+
+Accepted Milestone 16 direction:
+
+- Artifact directories use `out/artifacts/<goal>/<identity>/`.
+- Do not include `program` as a universal artifact path component; program and other settings belong in metadata.
+- Each successful artifact goal writes `artifact.toml` containing goal, kind, identity, params, produced files, and dependency identities.
+- `tools/gpgpu/artifacts.py` owns artifact path and metadata policy shared by run and clean.
+- `gpgpu clean` deletes only exact normalized artifact directories under `out/artifacts/<goal>/<identity>/`.
+- `gpgpu clean` never deletes source-tree files and never calls `make clean`.
+- Root-only clean supports artifact goals only.
+- `--deps` cleans artifact nodes in planner order and does not perform action/service/check lifecycle cleanup.
+- Missing artifact directories are reported but are not errors.
+- Broad paths such as `out/`, `out/artifacts/`, and `out/artifacts/<goal>` are refused.
+- Symlink artifact directories are refused initially.
+- Full artifact specs, cache validation, artifact injection, and garbage collection remain deferred.

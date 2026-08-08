@@ -5,6 +5,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Mapping
 
+from .artifacts import artifact_dir, write_artifact_metadata
 from .config import ResolvedConfig
 from .planner import GoalInstance, Plan
 
@@ -100,6 +101,8 @@ class Executor:
         executable_count = sum(1 for node in plan.nodes if node.goal_id in adapters)
         records: list[RunRecord] = []
         dependency_artifacts: dict[str, tuple[Path, ...]] = {}
+        dependency_identities: dict[str, str] = {}
+        nodes_by_key = {node.key: node for node in plan.nodes}
         if reporter is not None:
             reporter.plan_started(plan, executable_count)  # type: ignore[attr-defined]
 
@@ -141,7 +144,19 @@ class Executor:
                     reporter.plan_finished(summary)  # type: ignore[attr-defined]
                 return summary
             records.append(RunRecord(node=node, status="done", result=result))
+            if node.kind == "artifact":
+                write_artifact_metadata(
+                    context.artifact_dir,
+                    node=node,
+                    produced=result.produced,
+                    dependency_identities=self._direct_dependency_identities(
+                        node,
+                        nodes_by_key=nodes_by_key,
+                        completed=dependency_identities,
+                    ),
+                )
             dependency_artifacts[node.goal_id] = result.produced
+            dependency_identities[node.goal_id] = node.identity
             if reporter is not None:
                 reporter.goal_completed(node, result, elapsed)  # type: ignore[attr-defined]
 
@@ -171,6 +186,20 @@ class Executor:
         )
         return adapter(self._context_for(node, {}))  # type: ignore[misc]
 
+    def _direct_dependency_identities(
+        self,
+        node: GoalInstance,
+        *,
+        nodes_by_key: Mapping[str, GoalInstance],
+        completed: Mapping[str, str],
+    ) -> dict[str, str]:
+        identities: dict[str, str] = {}
+        for dependency_key in node.dependencies:
+            dependency = nodes_by_key[dependency_key]
+            if dependency.goal_id in completed:
+                identities[dependency.goal_id] = completed[dependency.goal_id]
+        return identities
+
     def _adapter_mapping(self):
         if self._adapters is not None:
             return self._adapters
@@ -192,12 +221,11 @@ class Executor:
         node: GoalInstance,
         dependency_artifacts: Mapping[str, tuple[Path, ...]],
     ) -> ExecutionContext:
-        program = str(self.config.get("program"))
         return ExecutionContext(
             config=self.config,
             repo_root=self.repo_root,
             node=node,
-            artifact_dir=self.repo_root / "out" / "artifacts" / node.goal_id / program / node.identity,
+            artifact_dir=artifact_dir(self.repo_root, node),
             dependency_artifacts=dependency_artifacts,
         )
 

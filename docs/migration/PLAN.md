@@ -363,38 +363,43 @@ Evidence:
 
 ## Current implementation scope
 
-### Milestone 15: declarative dependency metadata
+### Milestone 16: generic artifact layout and `gpgpu clean`
 
-Objective: move dependency metadata onto goal definitions so the planner no longer owns a goal-specific dependency `if` chain.
+Objective: make artifact directories goal-generic, record per-artifact metadata, and add a safe goal-instance-scoped clean command.
 
 Scope:
 
-- add `GoalDependency` declarations to `tools/gpgpu/goals.py`;
-- keep dependency conditions equality-only, currently for `demo.run` backend selection;
-- keep included/omitted dependency notes declarative on goal definitions;
-- remove `sw.program.compile_riscv` as an internal placeholder goal boundary because no distinct artifact boundary exists yet;
-- keep `sw.program.elf` as the RISC-V compile/link artifact boundary;
-- add schema-scope consistency tests between goal parameters and `ConfigResolver.SCHEMA`;
-- do not add artifact specs in this milestone, by user direction.
+- add `tools/gpgpu/artifacts.py` as the shared owner of artifact layout policy;
+- change generated artifact directories from `out/artifacts/<goal>/<program>/<identity>/` to `out/artifacts/<goal>/<identity>/`;
+- write `artifact.toml` in each successful artifact directory with goal, kind, identity, params, produced files, and dependency identities;
+- add `tools/gpgpu/cleaner.py`;
+- add `gpgpu clean <goal> [--dry-run] [--deps]`;
+- clean only exact normalized artifact directories under `out/artifacts/<goal>/<identity>/`;
+- root-only clean supports artifact goals only;
+- `--deps` selects artifact nodes in planner order;
+- refuse broad, outside, and symlink paths.
 
 Non-goals:
 
-- no artifact spec implementation;
-- no `gpgpu clean`;
+- no full artifact specs;
 - no cache hit/miss skipping;
 - no artifact injection;
-- no new adapters;
-- no Makefile behavior changes;
-- no hardware, UART, Vivado, demo, or RTL execution.
+- no broad `out/` garbage collection;
+- no source-tree legacy cleanup;
+- no `make clean`;
+- no hardware state, service lifecycle, Vivado, UART, RTL, or demo cleanup.
 
 Expected evidence:
 
-- dependencies for current goals are declared on `GoalDefinition` objects;
-- fake and FPGA demo dependency graphs remain unchanged;
-- `sw.program.elf` no longer depends on or displays `sw.program.compile_riscv`;
-- `gpgpu run sw.program.image` still runs `sw.program.elf` before `sw.program.image`;
-- `test.program` still preflight-fails because its check adapter is not implemented;
-- planner, executor, legacy characterization, and full discovery tests pass.
+- executor uses the shared artifact layout helper;
+- software run output and produced files use `out/artifacts/<goal>/<identity>/` with no program path component;
+- `artifact.toml` exists and records params, produced files, and dependency identities;
+- dry-run clean reports exact paths without deletion;
+- actual clean deletes only owned artifact directories;
+- `--deps` includes artifact dependencies in plan order;
+- non-artifact root-only clean fails clearly;
+- safety tests reject broad, outside, and symlink paths;
+- planner, executor, cleaner, legacy characterization, and full discovery tests pass.
 
 ## Dependency execution policy
 
@@ -439,9 +444,9 @@ Policy:
 - action goals such as board configuration and kernel load are not cleaned through artifact deletion;
 - service goals require lifecycle cleanup, not file deletion;
 - source-tree legacy artifacts require extra caution until they move under `out/`;
-- once artifacts live under `out/artifacts/<goal>/<program>/<identity>/`, clean can safely remove that directory.
+- once artifacts live under `out/artifacts/<goal>/<identity>/`, clean can safely remove that directory.
 
-Near-term implementation should keep using targeted test cleanup only. Do not add the `clean` command until artifact ownership and `out/` layout are defined.
+Near-term implementation should keep using targeted test cleanup only. Do not expand `clean` beyond owned artifact directories until lifecycle cleanup and artifact specs are explicit.
 
 ## Future `executor.py` direction
 
