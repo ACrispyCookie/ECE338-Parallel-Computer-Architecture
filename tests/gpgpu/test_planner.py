@@ -123,6 +123,48 @@ class PlannerFoundationTests(unittest.TestCase):
         node = Planner(config).plan("hw.board.kernel.run").root
         self.assertIn(("kernel.kernel_calls", 3), node.params)
 
+    def test_goal_dependencies_are_declared_on_goal_definitions(self):
+        from tools.gpgpu.goals import GOALS
+
+        image_deps = GOALS["sw.program.image"].dependencies
+        self.assertEqual(tuple(dep.goal_id for dep in image_deps), ("sw.program.elf",))
+        self.assertEqual(image_deps[0].role, "elf")
+
+        kernel_load_deps = GOALS["hw.board.kernel.load"].dependencies
+        self.assertEqual(
+            tuple(dep.goal_id for dep in kernel_load_deps),
+            ("hw.board.program", "sw.program.image"),
+        )
+        self.assertEqual(tuple(dep.role for dep in kernel_load_deps), ("configured_board", "program_image"))
+
+    def test_demo_dependencies_are_conditional_declarations(self):
+        from tools.gpgpu.goals import GOALS
+
+        declared = {(dep.goal_id, dep.when) for dep in GOALS["demo.run"].dependencies}
+        self.assertIn(("sw.program.native", (("backend", "fake"),)), declared)
+        self.assertIn(("hw.board.kernel.load", (("backend", "fpga-uart"),)), declared)
+
+    def test_compile_riscv_placeholder_is_not_a_goal_boundary(self):
+        from tools.gpgpu.goals import GOALS
+
+        self.assertNotIn("sw.program.compile_riscv", GOALS)
+        plan = self.make_planner().plan("sw.program.elf")
+        self.assertEqual([node.goal_id for node in plan.nodes], ["sw.program.elf"])
+
+    def test_goal_parameter_scopes_are_consistent_with_schema(self):
+        from tools.gpgpu.config import ConfigResolver
+        from tools.gpgpu.goals import GOALS
+
+        for goal in GOALS.values():
+            for name in goal.artifact_params:
+                self.assertIn(ConfigResolver.SCHEMA[name].scope, {"artifact", "shared"}, f"{goal.goal_id}:{name}")
+            for name in goal.runtime_params:
+                self.assertIn(
+                    ConfigResolver.SCHEMA[name].scope,
+                    {"runtime", "machine-local", "shared"},
+                    f"{goal.goal_id}:{name}",
+                )
+
     def test_no_fake_test_settings_are_added_yet(self):
         with self.assertRaisesRegex(ConfigError, "Unknown setting"):
             ConfigResolver().resolve(set_values=["test.rtl.simulator=iverilog"])
@@ -169,7 +211,7 @@ class PlannerFoundationTests(unittest.TestCase):
         all_ids = {goal.goal_id for goal in planner.list_goals(include_internal=True)}
         self.assertIn("demo.run", public_ids)
         self.assertNotIn("sw.program.compile_riscv", public_ids)
-        self.assertIn("sw.program.compile_riscv", all_ids)
+        self.assertNotIn("sw.program.compile_riscv", all_ids)
         self.assertNotIn("demo.nbody3d", all_ids)
 
     def test_plan_output_is_deterministic(self):

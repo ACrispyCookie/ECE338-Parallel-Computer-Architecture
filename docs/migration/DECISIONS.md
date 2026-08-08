@@ -141,3 +141,14 @@ Runtime-only, executor-only, and unrelated machine-local settings must not affec
 ## Artifact injection
 
 Initial decision: do not implement `--use-artifact` yet. Reconsider later after artifact metadata and compatibility validation exist.
+
+## Declarative dependency metadata
+
+Accepted Milestone 15 direction:
+
+- Goal dependencies are declared on `GoalDefinition` objects in `tools/gpgpu/goals.py`.
+- The planner resolves those declarations with equality-only conditions for now.
+- Do not introduce a general workflow DSL until real use cases require it.
+- Conditional demo dependencies are represented as backend conditions, not goal-specific planner branches.
+- `sw.program.compile_riscv` is removed as a planner goal because it does not currently own a distinct artifact boundary; `sw.program.elf` is the current RISC-V compile/link artifact boundary.
+- Artifact specs are intentionally deferred past Milestone 15.

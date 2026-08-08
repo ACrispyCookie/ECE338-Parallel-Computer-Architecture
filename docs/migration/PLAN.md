@@ -335,44 +335,72 @@ Evidence:
 - missing required root/check/action/service adapter fails before dependencies run;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current implementation scope
+## Completed run-output milestone
 
 ### Milestone 14: Docker-like `gpgpu run` progress reporter
 
 Objective: make `gpgpu run` output more focused and readable while preserving deterministic non-interactive behavior.
 
+Implemented in commits `c2d3ce3` and `a8b2859` on branch `gpgpu-planner-foundation`.
+
+Added/changed:
+
+- added a run reporter/event-sink layer separate from adapter execution;
+- supported deterministic compact progress output for non-TTY, `--progress plain`, and tests;
+- supported a TTY-oriented reporter with a single mutable current-goal area that clears and replaces the spinner/status line on completion or failure;
+- added `--progress auto|plain|tty`;
+- kept completed goals compact, showing status, elapsed time, and produced artifact basenames;
+- kept skipped internal goals compact with an explicit reason;
+- expanded failed goal output with command, stdout, stderr, exit code, and stopped dependents;
+- left graph semantics, artifact layout, adapter commands, cache behavior, and dependency selection unchanged.
+
+Evidence:
+
+- reporter tests cover compact completed goals, skipped goals, failure expansion, and current-goal rendering;
+- CLI tests cover `--progress plain` deterministic output;
+- existing adapter artifact tests pass with the compact run output;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Current implementation scope
+
+### Milestone 15: declarative dependency metadata
+
+Objective: move dependency metadata onto goal definitions so the planner no longer owns a goal-specific dependency `if` chain.
+
 Scope:
 
-- add a run reporter/event-sink layer separate from adapter execution;
-- support deterministic compact progress output for non-TTY, `--progress plain`, and tests;
-- support a TTY-oriented reporter with a single mutable current-goal area that clears and replaces the spinner/status line on completion or failure;
-- add `--progress auto|plain|tty`;
-- keep completed goals compact, showing status, elapsed time, and produced artifact basenames;
-- keep skipped internal goals compact with an explicit reason;
-- expand failed goal output with command, stdout, stderr, exit code, and stopped dependents;
-- leave graph semantics, artifact layout, adapter commands, cache behavior, and dependency selection unchanged.
+- add `GoalDependency` declarations to `tools/gpgpu/goals.py`;
+- keep dependency conditions equality-only, currently for `demo.run` backend selection;
+- keep included/omitted dependency notes declarative on goal definitions;
+- remove `sw.program.compile_riscv` as an internal placeholder goal boundary because no distinct artifact boundary exists yet;
+- keep `sw.program.elf` as the RISC-V compile/link artifact boundary;
+- add schema-scope consistency tests between goal parameters and `ConfigResolver.SCHEMA`;
+- do not add artifact specs in this milestone, by user direction.
 
 Non-goals:
 
-- no live subprocess stdout streaming;
-- no third-party terminal UI dependency;
-- no cache hit/miss skipping;
+- no artifact spec implementation;
 - no `gpgpu clean`;
-- no parallel execution;
+- no cache hit/miss skipping;
+- no artifact injection;
+- no new adapters;
+- no Makefile behavior changes;
 - no hardware, UART, Vivado, demo, or RTL execution.
 
 Expected evidence:
 
-- reporter tests cover compact completed goals, skipped goals, failure expansion, and spinner/current-goal rendering;
-- CLI tests cover `--progress plain` deterministic output;
-- existing adapter artifact tests pass with the new compact run output;
+- dependencies for current goals are declared on `GoalDefinition` objects;
+- fake and FPGA demo dependency graphs remain unchanged;
+- `sw.program.elf` no longer depends on or displays `sw.program.compile_riscv`;
+- `gpgpu run sw.program.image` still runs `sw.program.elf` before `sw.program.image`;
+- `test.program` still preflight-fails because its check adapter is not implemented;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
 ## Dependency execution policy
 
-Dependencies are declared in `tools/gpgpu/planner.py`, especially in `Planner._dependency_goal_ids()`. The planner builds and displays dependency graphs for `list`, `plan`, `explain`, and now `run`.
+Dependencies are declared in `tools/gpgpu/goals.py` on `GoalDefinition.dependencies`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
 
-`gpgpu run <goal>` executes registered adapters in the plan's topological order. Internal artifact nodes without adapters may be skipped only when they are planner-only implementation detail placeholders. Public goals, check goals, action goals, and service goals without adapters fail during preflight before any dependency adapter runs.
+`gpgpu run <goal>` executes registered adapters in the plan's topological order. Public goals, check goals, action goals, and service goals without adapters fail during preflight before any dependency adapter runs. Internal placeholder goals should not be added unless they represent a real artifact boundary; `sw.program.compile_riscv` was removed because `sw.program.elf` is the current compile/link artifact boundary.
 
 ## Makefile backend and future Python backend direction
 
@@ -478,9 +506,9 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Complete Milestone 13 dependency-aware `gpgpu run`.
-2. Add an explicit `gpgpu clean` design/implementation milestone after graph execution and artifact ownership are defined.
-3. Revisit planner-only internal goals such as `sw.program.compile_riscv` and decide whether to remove, merge, or implement them.
+1. Complete Milestone 15 declarative dependency metadata.
+2. Add an explicit `gpgpu clean` design/implementation milestone now that graph execution, artifact ownership, and dependency declarations are defined.
+3. Consider metadata-only artifact declarations as a focused follow-up before or during `clean`.
 4. Consider `test.program` as a check goal for native-vs-image comparison.
 5. Connect RTL test goals behind adapters only after characterization.
 6. Connect UART/board action goals behind explicit hardware-state policies.

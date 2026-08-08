@@ -174,46 +174,27 @@ class Planner:
         return tuple((name, self.config.get(name)) for name in names)
 
     def _dependency_goal_ids(self, goal_id: str) -> tuple[str, ...]:
-        if goal_id == "sw.program.elf":
-            return ("sw.program.compile_riscv",)
-        if goal_id == "sw.program.image":
-            return ("sw.program.elf",)
-        if goal_id == "hw.board.bitstream":
-            return ("hw.board.project",)
-        if goal_id == "hw.board.program":
-            return ("hw.board.bitstream",)
-        if goal_id == "hw.board.kernel.load":
-            return ("hw.board.program", "sw.program.image")
-        if goal_id == "hw.board.kernel.run":
-            return ("hw.board.kernel.load",)
-        if goal_id == "demo.run":
-            backend = self.config.get("backend")
-            if backend == "fake":
+        definition = GOALS[goal_id]
+        included: list[str] = []
+        for dependency in definition.dependencies:
+            if not self._condition_matches(dependency.when):
+                continue
+            included.append(dependency.goal_id)
+            if dependency.note_kind is not None:
                 self._notes.append(
                     PlanNote(
-                        kind="omitted",
-                        subject="hw.board.bitstream, hw.board.program, hw.board.kernel.load",
-                        reason="backend=fake uses native reference path",
+                        kind=dependency.note_kind,
+                        subject=dependency.note_subject or dependency.goal_id,
+                        reason=dependency.note_reason or "dependency condition matched",
                     )
                 )
-                return ("sw.program.native",)
-            if backend == "fpga-uart":
-                self._notes.append(
-                    PlanNote(
-                        kind="included",
-                        subject="hw.board.kernel.load",
-                        reason="backend=fpga-uart requires hardware program-image load",
-                    )
-                )
-                # Requiring hw.board.kernel.load pulls in hw.board.program, hw.board.bitstream,
-                # and sw.program.image exactly once through normal deduplication.
-                return ("hw.board.kernel.load",)
-            raise PlanError(f"Unsupported backend: {backend}")
-        if goal_id == "test.rtl":
-            return ("hw.rtl.assemble", "hw.rtl.sim_executable")
-        if goal_id == "test.program":
-            return ("sw.program.native", "sw.program.image")
-        return ()
+        for note in definition.omitted_dependency_notes:
+            if self._condition_matches(note.when):
+                self._notes.append(PlanNote(kind=note.kind, subject=note.subject, reason=note.reason))
+        return tuple(included)
+
+    def _condition_matches(self, conditions: tuple[tuple[str, object], ...]) -> bool:
+        return all(self.config.get(key) == value for key, value in conditions)
 
     def _identity_for(
         self,

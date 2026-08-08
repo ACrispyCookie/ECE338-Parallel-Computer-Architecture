@@ -7,6 +7,24 @@ GoalKind = str
 
 
 @dataclass(frozen=True)
+class GoalDependency:
+    goal_id: str
+    role: str
+    when: tuple[tuple[str, object], ...] = ()
+    note_kind: str | None = None
+    note_subject: str | None = None
+    note_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class GoalNote:
+    kind: str
+    subject: str
+    reason: str
+    when: tuple[tuple[str, object], ...] = ()
+
+
+@dataclass(frozen=True)
 class GoalDefinition:
     goal_id: str
     kind: GoalKind
@@ -18,6 +36,8 @@ class GoalDefinition:
     lifecycle: str | None = None
     expected_outputs: tuple[str, ...] = ()
     side_effects: tuple[str, ...] = ()
+    dependencies: tuple[GoalDependency, ...] = ()
+    omitted_dependency_notes: tuple[GoalNote, ...] = ()
 
     @property
     def cacheable(self) -> bool:
@@ -48,14 +68,7 @@ GOALS: dict[str, GoalDefinition] = {
         description="Build an instruction-memory image for the selected program.",
         artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
         expected_outputs=("instruction-memory image artifact", "data-memory image artifact"),
-    ),
-    "sw.program.compile_riscv": GoalDefinition(
-        goal_id="sw.program.compile_riscv",
-        kind="artifact",
-        public=False,
-        description="Internal RISC-V compiler invocation.",
-        artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
-        expected_outputs=("RISC-V compiler invocation artifact",),
+        dependencies=(GoalDependency("sw.program.elf", role="elf"),),
     ),
     "hw.board.project": GoalDefinition(
         goal_id="hw.board.project",
@@ -72,6 +85,7 @@ GOALS: dict[str, GoalDefinition] = {
         description="Build a programmable-logic bitstream.",
         artifact_params=("architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"),
         expected_outputs=("bitstream artifact",),
+        dependencies=(GoalDependency("hw.board.project", role="project"),),
     ),
     "hw.board.program": GoalDefinition(
         goal_id="hw.board.program",
@@ -80,6 +94,7 @@ GOALS: dict[str, GoalDefinition] = {
         description="Configure the selected board with a compatible bitstream.",
         runtime_params=("board", "board.configure_policy", "board.port"),
         side_effects=("configure selected board FPGA fabric",),
+        dependencies=(GoalDependency("hw.board.bitstream", role="bitstream"),),
     ),
     "hw.board.kernel.load": GoalDefinition(
         goal_id="hw.board.kernel.load",
@@ -88,6 +103,10 @@ GOALS: dict[str, GoalDefinition] = {
         description="Load a GPGPU program image and initial data into hardware.",
         runtime_params=("board", "kernel.load_policy", "uart.baud"),
         side_effects=("load selected program image into board memory",),
+        dependencies=(
+            GoalDependency("hw.board.program", role="configured_board"),
+            GoalDependency("sw.program.image", role="program_image"),
+        ),
     ),
     "hw.board.kernel.run": GoalDefinition(
         goal_id="hw.board.kernel.run",
@@ -96,6 +115,7 @@ GOALS: dict[str, GoalDefinition] = {
         description="Run a loaded GPGPU kernel through the current transport.",
         runtime_params=("board", "kernel.kernel_calls"),
         side_effects=("run loaded kernel on selected board",),
+        dependencies=(GoalDependency("hw.board.kernel.load", role="loaded_kernel"),),
     ),
     "demo.run": GoalDefinition(
         goal_id="demo.run",
@@ -105,6 +125,25 @@ GOALS: dict[str, GoalDefinition] = {
         runtime_params=("demo", "backend", "demo.fps", "demo.dataset", "demo.steps_per_frame", "demo.http_host", "demo.http_port"),
         lifecycle="long-running",
         side_effects=("start selected interactive demo service",),
+        dependencies=(
+            GoalDependency("sw.program.native", role="native_reference", when=(("backend", "fake"),)),
+            GoalDependency(
+                "hw.board.kernel.load",
+                role="loaded_kernel",
+                when=(("backend", "fpga-uart"),),
+                note_kind="included",
+                note_subject="hw.board.kernel.load",
+                note_reason="backend=fpga-uart requires hardware program-image load",
+            ),
+        ),
+        omitted_dependency_notes=(
+            GoalNote(
+                kind="omitted",
+                subject="hw.board.bitstream, hw.board.program, hw.board.kernel.load",
+                reason="backend=fake uses native reference path",
+                when=(("backend", "fake"),),
+            ),
+        ),
     ),
     "test.rtl": GoalDefinition(
         goal_id="test.rtl",
@@ -113,6 +152,10 @@ GOALS: dict[str, GoalDefinition] = {
         description="Run the RTL simulation test suite.",
         artifact_params=("architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"),
         expected_outputs=("RTL check result",),
+        dependencies=(
+            GoalDependency("hw.rtl.assemble", role="assembly_fixture"),
+            GoalDependency("hw.rtl.sim_executable", role="sim_executable"),
+        ),
     ),
     "test.program": GoalDefinition(
         goal_id="test.program",
@@ -121,6 +164,10 @@ GOALS: dict[str, GoalDefinition] = {
         description="Compare a native program run against generated program artifacts.",
         artifact_params=("program", "architecture", "program.optimization"),
         expected_outputs=("program comparison check result",),
+        dependencies=(
+            GoalDependency("sw.program.native", role="native_reference"),
+            GoalDependency("sw.program.image", role="program_image"),
+        ),
     ),
     "hw.rtl.assemble": GoalDefinition(
         goal_id="hw.rtl.assemble",

@@ -197,6 +197,23 @@ Compatibility behavior:
 
 No live subprocess stdout streaming is implemented yet. Adapters still capture stdout/stderr and expose it after command completion, with stderr/stdout printed on failure.
 
+## Milestone 15 declarative dependency metadata
+
+Milestone 15 changes where dependency metadata lives without changing adapter commands or legacy workflow behavior.
+
+Compatibility behavior:
+
+- dependencies are declared on goal definitions in `tools/gpgpu/goals.py`, not as a goal-specific `if` chain in `Planner._dependency_goal_ids()`;
+- conditional dependencies are equality-only declarations, currently used for `demo.run` backend selection;
+- included/omitted dependency notes remain visible in verbose plans;
+- `sw.program.compile_riscv` is removed as an internal planner placeholder because it does not currently own a distinct artifact boundary;
+- `sw.program.elf` is the current RISC-V compile/link artifact boundary;
+- `gpgpu run sw.program.elf` no longer displays a skipped `sw.program.compile_riscv` node;
+- `gpgpu run sw.program.image` still runs `sw.program.elf` before `sw.program.image` and passes `ELF_IN=<elf artifact>`;
+- artifact specs are intentionally not implemented in this milestone.
+
+The removal may change software artifact identity hashes because dependency identities participate in artifact identity. This is acceptable before persistent cache semantics exist and removes a misleading placeholder boundary.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:
