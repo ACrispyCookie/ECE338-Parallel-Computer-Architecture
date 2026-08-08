@@ -5,9 +5,10 @@ import os
 import sys
 
 from .config import ConfigError, ConfigResolver
-from .executor import ExecuteError, Executor, format_run_summary
+from .executor import ExecuteError, Executor
 from .goals import GoalDefinition
 from .planner import Plan, PlanError, Planner
+from .reporter import InteractiveRunReporter, PlainRunReporter
 
 RESET = "\033[0m"
 BOLD = "\033[1m"
@@ -47,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("goal")
     run_parser.add_argument("--profile", default=None)
     run_parser.add_argument("--set", dest="set_values", action="append", default=[])
+    run_parser.add_argument(
+        "--progress",
+        choices=("auto", "plain", "tty"),
+        default="auto",
+        help="Run progress renderer: auto, plain, or tty (default: auto)",
+    )
 
     return parser
 
@@ -100,6 +107,12 @@ def format_plan(plan: Plan, *, color: bool, verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
+def make_run_reporter(progress: str, *, color: bool):
+    if progress == "tty" or (progress == "auto" and sys.stdout.isatty()):
+        return InteractiveRunReporter(sys.stdout, color=color)
+    return PlainRunReporter(sys.stdout, color=color)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -134,8 +147,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run":
-            summary = Executor(config).run_plan(plan)
-            print(format_run_summary(summary, color=color))
+            reporter = make_run_reporter(args.progress, color=color)
+            summary = Executor(config).run_plan(plan, reporter=reporter)
             return summary.returncode
 
         parser.error(f"Unknown command: {args.command}")

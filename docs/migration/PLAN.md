@@ -306,33 +306,26 @@ Evidence:
 - tracked generated snapshots such as `sw/programs/nbody/nbody_program.asm` stay clean;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current implementation scope
+## Completed run-execution milestone
 
 ### Milestone 13: dependency-aware `gpgpu run`
 
 Objective: make `gpgpu run <goal>` execute the planned graph in topological order instead of invoking only the root adapter.
 
-Scope:
+Implemented in commit `5b484e4` on branch `gpgpu-planner-foundation`.
 
-- add `Executor.run_plan(plan)`;
-- preflight the plan before running so missing public/action/service/check adapters fail before side effects;
-- visibly skip internal planner-only artifact nodes that have no adapter;
-- execute registered adapters in `plan.nodes` order;
-- stop on the first nonzero adapter return code;
-- show readable run progress, completed goals, skipped goals, failed goal stdout/stderr, and summary counts;
-- pass produced dependency artifacts into dependent adapter contexts;
-- make `sw.program.image` consume the `sw.program.elf` artifact through `ELF_IN` instead of rebuilding ELF in the image artifact directory.
+Added/changed:
 
-Non-goals:
+- added `Executor.run_plan(plan)`;
+- preflighted the plan before running so missing public/action/service/check adapters fail before side effects;
+- visibly skipped internal planner-only artifact nodes that have no adapter;
+- executed registered adapters in `plan.nodes` order;
+- stopped on the first nonzero adapter return code;
+- showed readable run progress, completed goals, skipped goals, failed goal stdout/stderr, and summary counts;
+- passed produced dependency artifacts into dependent adapter contexts;
+- made `sw.program.image` consume the `sw.program.elf` artifact through `ELF_IN` instead of rebuilding ELF in the image artifact directory.
 
-- no cache hit/miss skipping;
-- no `gpgpu clean` subcommand implementation yet;
-- no `--force`;
-- no artifact injection;
-- no parallel execution;
-- no hardware, UART, Vivado, demo, or RTL execution.
-
-Expected evidence:
+Evidence:
 
 - `gpgpu run sw.program.image` runs `sw.program.elf` before `sw.program.image`;
 - `sw.program.compile_riscv` is visibly skipped as an internal planner-only artifact;
@@ -340,6 +333,39 @@ Expected evidence:
 - image artifact directory contains memory/dump outputs, not duplicate ELF/map outputs;
 - failing dependency stops dependent execution and prints stdout/stderr;
 - missing required root/check/action/service adapter fails before dependencies run;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Current implementation scope
+
+### Milestone 14: Docker-like `gpgpu run` progress reporter
+
+Objective: make `gpgpu run` output more focused and readable while preserving deterministic non-interactive behavior.
+
+Scope:
+
+- add a run reporter/event-sink layer separate from adapter execution;
+- support deterministic compact progress output for non-TTY, `--progress plain`, and tests;
+- support a TTY-oriented reporter with a current-goal spinner/progress line;
+- add `--progress auto|plain|tty`;
+- keep completed goals compact, showing status, elapsed time, and produced artifact basenames;
+- keep skipped internal goals compact with an explicit reason;
+- expand failed goal output with command, stdout, stderr, exit code, and stopped dependents;
+- leave graph semantics, artifact layout, adapter commands, cache behavior, and dependency selection unchanged.
+
+Non-goals:
+
+- no live subprocess stdout streaming;
+- no third-party terminal UI dependency;
+- no cache hit/miss skipping;
+- no `gpgpu clean`;
+- no parallel execution;
+- no hardware, UART, Vivado, demo, or RTL execution.
+
+Expected evidence:
+
+- reporter tests cover compact completed goals, skipped goals, failure expansion, and spinner/current-goal rendering;
+- CLI tests cover `--progress plain` deterministic output;
+- existing adapter artifact tests pass with the new compact run output;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
 ## Dependency execution policy

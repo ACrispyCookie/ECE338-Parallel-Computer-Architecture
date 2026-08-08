@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Mapping
 
 from .config import ResolvedConfig
@@ -93,56 +94,66 @@ class Executor:
         self.repo_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[2]
         self._adapters = adapters
 
-    def run_plan(self, plan: Plan) -> RunSummary:
+    def run_plan(self, plan: Plan, *, reporter: object | None = None) -> RunSummary:
         adapters = self._adapter_mapping()
         self._preflight(plan, adapters)
         executable_count = sum(1 for node in plan.nodes if node.goal_id in adapters)
         records: list[RunRecord] = []
         dependency_artifacts: dict[str, tuple[Path, ...]] = {}
+        if reporter is not None:
+            reporter.plan_started(plan, executable_count)  # type: ignore[attr-defined]
 
         for index, node in enumerate(plan.nodes):
             adapter = adapters.get(node.goal_id)
             if adapter is None:
                 if self._can_skip_missing_adapter(node):
-                    records.append(
-                        RunRecord(
-                            node=node,
-                            status="skipped",
-                            reason="internal planner-only artifact has no registered adapter",
-                        )
-                    )
+                    reason = "internal planner-only artifact has no registered adapter"
+                    records.append(RunRecord(node=node, status="skipped", reason=reason))
+                    if reporter is not None:
+                        reporter.goal_skipped(node, reason)  # type: ignore[attr-defined]
                     continue
                 raise ExecuteError(f"no executor adapter registered for required goal {node.goal_id}")
 
             context = self._context_for(node, dependency_artifacts)
             records.append(RunRecord(node=node, status="running"))
+            if reporter is not None:
+                reporter.goal_started(node, context)  # type: ignore[attr-defined]
+            started_at = perf_counter()
             result = adapter(context)  # type: ignore[misc]
+            elapsed = perf_counter() - started_at
             if result.returncode != 0:
                 records.append(RunRecord(node=node, status="failed", result=result))
+                if reporter is not None:
+                    reporter.goal_failed(node, result, elapsed)  # type: ignore[attr-defined]
                 for remaining in plan.nodes[index + 1:]:
                     if remaining.goal_id in adapters:
-                        records.append(
-                            RunRecord(
-                                node=remaining,
-                                status="stopped",
-                                reason=f"dependency {node.goal_id} failed",
-                            )
-                        )
-                return RunSummary(
+                        reason = f"dependency {node.goal_id} failed"
+                        records.append(RunRecord(node=remaining, status="stopped", reason=reason))
+                        if reporter is not None:
+                            reporter.goal_stopped(remaining, reason)  # type: ignore[attr-defined]
+                summary = RunSummary(
                     root=plan.root,
                     planned_count=len(plan.nodes),
                     executable_count=executable_count,
                     records=tuple(records),
                 )
+                if reporter is not None:
+                    reporter.plan_finished(summary)  # type: ignore[attr-defined]
+                return summary
             records.append(RunRecord(node=node, status="done", result=result))
             dependency_artifacts[node.goal_id] = result.produced
+            if reporter is not None:
+                reporter.goal_completed(node, result, elapsed)  # type: ignore[attr-defined]
 
-        return RunSummary(
+        summary = RunSummary(
             root=plan.root,
             planned_count=len(plan.nodes),
             executable_count=executable_count,
             records=tuple(records),
         )
+        if reporter is not None:
+            reporter.plan_finished(summary)  # type: ignore[attr-defined]
+        return summary
 
     def run(self, goal_id: str, *, artifact_identity: str) -> RunResult:
         adapters = self._adapter_mapping()

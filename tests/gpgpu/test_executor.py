@@ -15,6 +15,7 @@ from tools.gpgpu.cli import main
 from tools.gpgpu.config import ConfigResolver
 from tools.gpgpu.executor import Executor, RunResult, format_run_summary
 from tools.gpgpu.planner import Planner
+from tools.gpgpu.reporter import InteractiveRunReporter, PlainRunReporter
 
 
 class ExecutorStructureTests(unittest.TestCase):
@@ -156,6 +157,84 @@ class GraphRunTests(unittest.TestCase):
 
         self.assertEqual(calls, [])
 
+    def test_plain_reporter_prints_compact_completed_goals(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.image")
+        stream = io.StringIO()
+
+        def record(name: str):
+            def adapter(context):
+                return RunResult(
+                    goal_id=context.goal_id,
+                    command=("fake", name),
+                    returncode=0,
+                    produced=(context.artifact_dir / f"{name}.artifact",),
+                )
+            return adapter
+
+        summary = Executor(
+            config,
+            adapters={"sw.program.elf": record("elf"), "sw.program.image": record("image")},
+        ).run_plan(plan, reporter=PlainRunReporter(stream, repo_root=ROOT, color=False))
+
+        rendered = stream.getvalue()
+        self.assertEqual(summary.returncode, 0)
+        self.assertIn("gpgpu run sw.program.image", rendered)
+        self.assertIn("✓ sw.program.elf", rendered)
+        self.assertIn("✓ sw.program.image", rendered)
+        self.assertIn("∙ sw.program.compile_riscv", rendered)
+        self.assertIn("Summary: 2 completed, 1 skipped, 0 failed", rendered)
+        self.assertNotIn("RUNNING", rendered)
+        self.assertNotIn("DONE", rendered)
+
+    def test_interactive_reporter_focuses_current_goal_with_spinner(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.native")
+        stream = io.StringIO()
+
+        def native(context):
+            return RunResult(
+                goal_id=context.goal_id,
+                command=("fake", "native"),
+                returncode=0,
+                produced=(context.artifact_dir / "native.artifact",),
+            )
+
+        summary = Executor(config, adapters={"sw.program.native": native}).run_plan(
+            plan,
+            reporter=InteractiveRunReporter(stream, repo_root=ROOT, color=False),
+        )
+
+        rendered = stream.getvalue()
+        self.assertEqual(summary.returncode, 0)
+        self.assertIn("[1/1] sw.program.native", rendered)
+        self.assertIn("⠋ running fake native", rendered)
+        self.assertIn("\r", rendered)
+        self.assertIn("✓ sw.program.native", rendered)
+        self.assertIn("Summary: 1 completed, 0 skipped, 0 failed", rendered)
+
+    def test_cli_progress_plain_uses_compact_reporter(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = main([
+                "--color",
+                "never",
+                "run",
+                "sw.program.native",
+                "--progress",
+                "plain",
+                "--set",
+                f"program={self.program}",
+            ])
+
+        rendered = stdout.getvalue()
+        self.assertEqual(code, 0, stderr.getvalue() + rendered)
+        self.assertIn("gpgpu run sw.program.native", rendered)
+        self.assertIn("✓ sw.program.native", rendered)
+        self.assertIn("Summary: 1 completed, 0 skipped, 0 failed", rendered)
+        self.assertNotIn("Run: sw.program.native", rendered)
+
 
 class ProgramAdapterTests(unittest.TestCase):
     program = "nbody"
@@ -232,11 +311,11 @@ class ProgramAdapterTests(unittest.TestCase):
 
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
-        self.assertIn("Run: sw.program.native", rendered)
-        self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
-        self.assertIn(" native", rendered)
-        self.assertIn("produced:", rendered)
-        self.assertIn(f"out/artifacts/sw.program.native/nbody/{out_dir.name}/nbody_x86", rendered)
+        self.assertIn("gpgpu run sw.program.native", rendered)
+        self.assertIn("[1/1] sw.program.native", rendered)
+        self.assertIn("✓ sw.program.native", rendered)
+        self.assertIn("produced nbody_x86", rendered)
+        self.assertIn(f"out/artifacts/sw.program.native/nbody/{out_dir.name}", rendered)
         self.assertTrue(out_native.exists())
         self.assertTrue(os.access(out_native, os.X_OK))
         self.assertFalse(self.native_exe.exists())
@@ -268,10 +347,12 @@ class ProgramAdapterTests(unittest.TestCase):
 
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
-        self.assertIn("Run: sw.program.elf", rendered)
-        self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
-        self.assertIn(" elf", rendered)
-        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{out_dir.name}/nbody.elf", rendered)
+        self.assertIn("gpgpu run sw.program.elf", rendered)
+        self.assertIn("∙ sw.program.compile_riscv", rendered)
+        self.assertIn("[1/1] sw.program.elf", rendered)
+        self.assertIn("✓ sw.program.elf", rendered)
+        self.assertIn("produced nbody.elf, nbody.map", rendered)
+        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{out_dir.name}", rendered)
         self.assertTrue(out_elf.exists())
         self.assertTrue(out_map.exists())
         self.assertFalse(self.elf.exists())
@@ -293,13 +374,15 @@ class ProgramAdapterTests(unittest.TestCase):
 
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
-        self.assertIn("Run: sw.program.image", rendered)
-        self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
-        self.assertIn("ELF_IN=", rendered)
-        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{elf_dir.name}/nbody.elf", rendered)
-        self.assertIn(" image", rendered)
-        self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}/nbody_instructions.mem", rendered)
-        self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}/nbody_dump_real.asm", rendered)
+        self.assertIn("gpgpu run sw.program.image", rendered)
+        self.assertIn("∙ sw.program.compile_riscv", rendered)
+        self.assertIn("[1/2] sw.program.elf", rendered)
+        self.assertIn("[2/2] sw.program.image", rendered)
+        self.assertIn("✓ sw.program.elf", rendered)
+        self.assertIn("✓ sw.program.image", rendered)
+        self.assertIn("produced nbody_instructions.mem, nbody_dump_real.asm", rendered)
+        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{elf_dir.name}", rendered)
+        self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}", rendered)
         self.assertTrue(out_mem.exists())
         self.assertTrue(out_dump.exists())
         self.assertFalse(out_elf.exists())

@@ -174,6 +174,27 @@ Milestone 13 dependency-aware `gpgpu run` resolves that limitation for registere
 - failures stop dependent goals and show the failed goal stdout/stderr;
 - `sw.program.image` consumes the `sw.program.elf` output via `ELF_IN=<elf artifact>` instead of rebuilding ELF in the image artifact directory.
 
+## Milestone 14 Docker-like run progress reporter
+
+Milestone 14 changes the presentation of `gpgpu run` without changing graph semantics or adapter behavior.
+
+```bash
+tools/gpgpu/gpgpu run sw.program.image --set program=nbody
+```
+
+Compatibility behavior:
+
+- dependency order, stop-on-failure behavior, and adapter commands are unchanged from Milestone 13;
+- compact progress output is now the default for non-TTY runs and captured test output;
+- `--progress plain` forces deterministic compact output;
+- `--progress tty` forces the current-goal-focused interactive renderer with a spinner/progress line;
+- completed goals collapse to one line with status, elapsed time, and produced artifact basenames;
+- skipped internal planner-only goals are retained as compact records with a reason;
+- failed goals expand the command, stdout, stderr, and stop reasons for dependents;
+- successful compact output intentionally does not print the full Make command unless using the older `format_run_summary()` helper in tests/debugging.
+
+No live subprocess stdout streaming is implemented yet. Adapters still capture stdout/stderr and expose it after command completion, with stderr/stdout printed on failure.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:
