@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run":
-            result = Executor(config).run(args.goal)
+            result = Executor(config).run(args.goal, artifact_identity=plan.root.identity)
             print(format_run_result(result))
             return result.returncode
 

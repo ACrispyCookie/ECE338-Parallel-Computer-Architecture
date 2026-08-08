@@ -254,38 +254,71 @@ Evidence:
 - planner, executor, legacy characterization, and full discovery tests pass;
 - generated program artifacts are cleaned before commit.
 
-## Current implementation scope
+## Completed executor-structure milestone
 
 ### Milestone 11: executor adapter registry and artifact-policy documentation
 
-Objective: clean up the executor structure now that three program adapters exist, and record the Makefile/backend, `out/`, and cleaning policies before changing artifact locations.
+Objective: clean up the executor structure now that three program adapters exist, and record the Makefile/backend, `out`, and cleaning policies before changing artifact locations.
 
-Scope:
+Implemented in commits `b0fc64a` and `19e6e1e` on branch `gpgpu-planner-foundation`.
 
-- introduce `tools/gpgpu/adapters/` with a small goal-id adapter registry;
-- move software program adapter functions into `tools/gpgpu/adapters/sw_programs.py`;
-- keep `tools/gpgpu/executor.py` as a thin coordinator that dispatches by goal id;
-- move run-result formatting/types back into `tools/gpgpu/executor.py` rather than keeping a premature one-purpose module;
-- keep all command behavior and output paths unchanged;
-- document that Makefile remains the backend for now, while a later Python-native backend remains possible;
-- document the future `gpgpu clean` subcommand model.
+Added/changed:
 
-Non-goals:
+- introduced `tools/gpgpu/adapters/` with a small goal-id adapter registry;
+- moved software program adapter functions into `tools/gpgpu/adapters/sw_programs.py`;
+- kept `tools/gpgpu/executor.py` as a thin coordinator that dispatches by goal id;
+- moved run-result formatting/types back into `tools/gpgpu/executor.py` rather than keeping a premature one-purpose module;
+- kept all command behavior and output paths unchanged;
+- documented that Makefile remains the backend for now, while a later Python-native backend remains possible;
+- documented the future `gpgpu clean` subcommand model.
 
-- no Makefile rewrite;
-- no generated-artifact relocation into `out/` yet;
-- no new executable goals;
-- no graph executor;
-- no cache implementation;
-- no clean subcommand implementation yet.
-
-Expected evidence:
+Evidence:
 
 - adapter registry exposes `sw.program.native`, `sw.program.elf`, and `sw.program.image`;
 - executor no longer owns domain-specific `_run_sw_program_*` methods;
 - native, ELF, and image adapters still execute the exact same Make commands;
 - unsupported goals still fail clearly;
 - planner, executor, legacy characterization, and full discovery tests pass.
+
+## Current implementation scope
+
+### Milestone 12: route software artifacts to `out/`
+
+Objective: move software artifact outputs for the current program adapters out of `sw/programs/<program>/` and into identity-scoped directories under `out/`.
+
+Scope:
+
+- use planner root artifact identity for `gpgpu run` output directories;
+- route `sw.program.native`, `sw.program.elf`, and `sw.program.image` outputs to `out/artifacts/<goal-id>/<program>/<identity>/`;
+- keep Makefile as the compatibility backend, but add `OUT_DIR` support and named `native`, `elf`, and `image` targets;
+- preserve current compiler/linker/objdump/awk behavior and generated filenames;
+- leave `gpgpu clean` for a later milestone.
+
+Non-goals:
+
+- no graph executor yet;
+- no dependency execution beyond what Makefile performs internally;
+- no cache implementation;
+- no `gpgpu clean` subcommand implementation yet;
+- no Makefile replacement with Python-native build commands;
+- no hardware, UART, Vivado, demo, or RTL execution.
+
+Expected evidence:
+
+- native, ELF, and image artifacts appear under `out/artifacts/<goal-id>/<program>/<identity>/`;
+- no source-tree software generated artifacts are left behind by `gpgpu run`;
+- artifact-affecting settings change output directories;
+- runtime-only settings do not change output directories;
+- tracked generated snapshots such as `sw/programs/nbody/nbody_program.asm` stay clean;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Current dependency execution limitation
+
+Dependencies are currently declared in `tools/gpgpu/planner.py`, especially in `Planner._dependency_goal_ids()`. The planner builds and displays dependency graphs for `list`, `plan`, and `explain`.
+
+However, `gpgpu run <goal>` does not yet execute the planned dependency graph. It executes only the adapter registered for the requested root goal. For example, `gpgpu run sw.program.image` currently invokes the `sw.program.image` adapter only. Any lower-level file prerequisites are handled by Makefile's internal dependency rules, not by goal execution.
+
+This is an intentional temporary limitation of the compatibility-adapter milestones, but it must be fixed before hardware/action/service workflows. The next executor milestone should introduce graph execution: walk `plan.nodes` in dependency order, run each registered adapter once per goal instance, pass dependency artifacts explicitly where needed, and distinguish artifact/action/service/check behavior.
 
 ## Makefile backend and future Python backend direction
 
@@ -391,9 +424,9 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Complete Milestone 11 executor adapter registry and artifact-policy documentation.
-2. Decide and implement generated software artifact placement under `out/`.
-3. Add an explicit `gpgpu clean` design/implementation milestone after artifact ownership is defined.
+1. Complete Milestone 12 software artifact routing to `out/`.
+2. Introduce graph execution for `gpgpu run` so planned dependencies run as goal instances instead of relying only on Makefile prerequisites.
+3. Add an explicit `gpgpu clean` design/implementation milestone after graph execution and artifact ownership are defined.
 4. Consider `test.program` as a check goal for native-vs-image comparison.
 5. Connect RTL test goals behind adapters only after characterization.
 6. Connect UART/board action goals behind explicit hardware-state policies.

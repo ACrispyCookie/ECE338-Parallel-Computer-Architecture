@@ -138,6 +138,35 @@ Backend policy: keep Makefile as the compatibility backend for now. A later mile
 
 Clean policy: do not add broad or implicit cleaning to `gpgpu run`. A future `gpgpu clean <goal>` should remove only artifacts owned by a normalized goal instance, and `--force` should rebuild scoped artifacts rather than calling broad `make clean`.
 
+## Milestone 12 software artifact `out/` routing
+
+Milestone 12 changes the output location for the three current software artifact adapters while preserving the Makefile backend:
+
+```text
+out/artifacts/<goal-id>/<program>/<artifact-identity>/
+```
+
+Representative outputs:
+
+```text
+out/artifacts/sw.program.native/nbody/<identity>/nbody_x86
+out/artifacts/sw.program.elf/nbody/<identity>/nbody.elf
+out/artifacts/sw.program.elf/nbody/<identity>/nbody.map
+out/artifacts/sw.program.image/nbody/<identity>/nbody_instructions.mem
+out/artifacts/sw.program.image/nbody/<identity>/nbody_dump_real.asm
+```
+
+Compatibility behavior:
+
+- `sw.program.native`, `sw.program.elf`, and `sw.program.image` still use `make -C sw/programs`;
+- Makefile accepts `OUT_DIR=<artifact-dir>` and exposes named `native`, `elf`, and `image` targets;
+- source inputs remain under `sw/programs/<program>/`;
+- generated software artifacts are no longer written to `sw/programs/<program>/` by `gpgpu run`;
+- no broad `make clean` is introduced;
+- no `gpgpu clean` command is implemented yet.
+
+Current dependency limitation: dependencies are declared in the planner, but `gpgpu run` still executes only the root adapter. Makefile may build file prerequisites internally, but goal dependencies such as `sw.program.elf -> sw.program.image` are not executed as separate goal instances yet. This must be addressed by a later graph-executor milestone.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:

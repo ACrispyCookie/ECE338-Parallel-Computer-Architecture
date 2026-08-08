@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tools.gpgpu.cli import main
+from tools.gpgpu.config import ConfigResolver
+from tools.gpgpu.planner import Planner
 
 
 class ExecutorStructureTests(unittest.TestCase):
@@ -43,29 +45,21 @@ class ProgramAdapterTests(unittest.TestCase):
         self.mem = self.program_dir / f"{self.program}_instructions.mem"
         self.program_asm = self.program_dir / f"{self.program}_program.asm"
         self.program_asm_snapshot = self.program_asm.read_text() if self.program_asm.exists() else None
-        self.out_native = ROOT / "out" / f"{self.program}_x86"
-        self.out_elf = ROOT / "out" / f"{self.program}.elf"
-        self.out_mem = ROOT / "out" / f"{self.program}_instructions.mem"
-        self.native_exe.unlink(missing_ok=True)
-        self.elf.unlink(missing_ok=True)
-        self.map_file.unlink(missing_ok=True)
-        self.dump_asm.unlink(missing_ok=True)
-        self.mem.unlink(missing_ok=True)
-        self.out_native.unlink(missing_ok=True)
-        self.out_elf.unlink(missing_ok=True)
-        self.out_mem.unlink(missing_ok=True)
+        self.clean_generated_outputs()
 
     def tearDown(self):
+        self.clean_generated_outputs()
+        if self.program_asm_snapshot is not None:
+            self.program_asm.write_text(self.program_asm_snapshot)
+
+    def clean_generated_outputs(self):
         self.native_exe.unlink(missing_ok=True)
         self.elf.unlink(missing_ok=True)
         self.map_file.unlink(missing_ok=True)
         self.dump_asm.unlink(missing_ok=True)
         self.mem.unlink(missing_ok=True)
-        self.out_native.unlink(missing_ok=True)
-        self.out_elf.unlink(missing_ok=True)
-        self.out_mem.unlink(missing_ok=True)
-        if self.program_asm_snapshot is not None:
-            self.program_asm.write_text(self.program_asm_snapshot)
+        for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
+            shutil.rmtree(ROOT / "out" / "artifacts" / goal_id / self.program, ignore_errors=True)
 
     def require_native_tools(self):
         if shutil.which("make") is None:
@@ -78,6 +72,11 @@ class ProgramAdapterTests(unittest.TestCase):
             self.skipTest("make is required for RISC-V compatibility adapter test")
         if shutil.which("riscv64-unknown-elf-gcc") is None and shutil.which("riscv-none-elf-gcc") is None:
             self.skipTest("riscv64-unknown-elf-gcc or riscv-none-elf-gcc is required for RISC-V compatibility adapter test")
+
+    def artifact_dir(self, goal_id: str, *set_values: str) -> Path:
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}", *set_values])
+        identity = Planner(config).plan(goal_id).root.identity
+        return ROOT / "out" / "artifacts" / goal_id / self.program / identity
 
     def test_unsupported_run_goal_fails_clearly(self):
         stdout = io.StringIO()
@@ -97,8 +96,11 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("no executor adapter registered for test.program", stderr.getvalue())
 
-    def test_native_adapter_builds_legacy_executable(self):
+    def test_native_adapter_builds_artifact_under_out(self):
         self.require_native_tools()
+        out_dir = self.artifact_dir("sw.program.native")
+        out_native = out_dir / f"{self.program}_x86"
+
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
@@ -107,12 +109,13 @@ class ProgramAdapterTests(unittest.TestCase):
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("Run: sw.program.native", rendered)
-        self.assertIn("make -C sw/programs PROG=nbody x86", rendered)
+        self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
+        self.assertIn(" native", rendered)
         self.assertIn("Produced:", rendered)
-        self.assertIn("sw/programs/nbody/nbody_x86", rendered)
-        self.assertTrue(self.native_exe.exists())
-        self.assertTrue(os.access(self.native_exe, os.X_OK))
-        self.assertFalse(self.out_native.exists())
+        self.assertIn(f"out/artifacts/sw.program.native/nbody/{out_dir.name}/nbody_x86", rendered)
+        self.assertTrue(out_native.exists())
+        self.assertTrue(os.access(out_native, os.X_OK))
+        self.assertFalse(self.native_exe.exists())
 
     def test_native_adapter_does_not_run_program_or_create_data_csv(self):
         self.require_native_tools()
@@ -128,8 +131,12 @@ class ProgramAdapterTests(unittest.TestCase):
         finally:
             data_csv.unlink(missing_ok=True)
 
-    def test_elf_adapter_builds_legacy_riscv_elf(self):
+    def test_elf_adapter_builds_artifacts_under_out(self):
         self.require_riscv_tools()
+        out_dir = self.artifact_dir("sw.program.elf")
+        out_elf = out_dir / f"{self.program}.elf"
+        out_map = out_dir / f"{self.program}.map"
+
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
@@ -138,14 +145,22 @@ class ProgramAdapterTests(unittest.TestCase):
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("Run: sw.program.elf", rendered)
-        self.assertIn("make -C sw/programs PROG=nbody nbody/nbody.elf", rendered)
-        self.assertIn("Produced:", rendered)
-        self.assertIn("sw/programs/nbody/nbody.elf", rendered)
-        self.assertTrue(self.elf.exists())
-        self.assertFalse(self.out_elf.exists())
+        self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
+        self.assertIn(" elf", rendered)
+        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{out_dir.name}/nbody.elf", rendered)
+        self.assertTrue(out_elf.exists())
+        self.assertTrue(out_map.exists())
+        self.assertFalse(self.elf.exists())
+        self.assertFalse(self.map_file.exists())
 
-    def test_image_adapter_builds_legacy_instruction_memory(self):
+    def test_image_adapter_builds_artifacts_under_out(self):
         self.require_riscv_tools()
+        out_dir = self.artifact_dir("sw.program.image")
+        out_mem = out_dir / f"{self.program}_instructions.mem"
+        out_dump = out_dir / f"{self.program}_dump_real.asm"
+        out_elf = out_dir / f"{self.program}.elf"
+        out_map = out_dir / f"{self.program}.map"
+
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
@@ -154,13 +169,30 @@ class ProgramAdapterTests(unittest.TestCase):
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("Run: sw.program.image", rendered)
-        self.assertIn("make -C sw/programs PROG=nbody nbody/nbody_instructions.mem", rendered)
-        self.assertIn("Produced:", rendered)
-        self.assertIn("sw/programs/nbody/nbody_instructions.mem", rendered)
-        self.assertIn("sw/programs/nbody/nbody_dump_real.asm", rendered)
-        self.assertTrue(self.mem.exists())
-        self.assertTrue(self.dump_asm.exists())
-        self.assertFalse(self.out_mem.exists())
+        self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
+        self.assertIn(" image", rendered)
+        self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}/nbody_instructions.mem", rendered)
+        self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}/nbody_dump_real.asm", rendered)
+        self.assertTrue(out_mem.exists())
+        self.assertTrue(out_dump.exists())
+        self.assertTrue(out_elf.exists())
+        self.assertTrue(out_map.exists())
+        self.assertFalse(self.elf.exists())
+        self.assertFalse(self.map_file.exists())
+        self.assertFalse(self.dump_asm.exists())
+        self.assertFalse(self.mem.exists())
+
+    def test_artifact_affecting_option_changes_output_directory(self):
+        o2_dir = self.artifact_dir("sw.program.image", "program.optimization=O2")
+        o3_dir = self.artifact_dir("sw.program.image", "program.optimization=O3")
+
+        self.assertNotEqual(o2_dir, o3_dir)
+
+    def test_runtime_option_does_not_change_output_directory(self):
+        default_dir = self.artifact_dir("sw.program.image")
+        fps_dir = self.artifact_dir("sw.program.image", "demo.fps=30")
+
+        self.assertEqual(default_dir, fps_dir)
 
 
 if __name__ == "__main__":

@@ -33,13 +33,13 @@ class Executor:
         self.config = config
         self.repo_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[2]
 
-    def run(self, goal_id: str) -> RunResult:
+    def run(self, goal_id: str, *, artifact_identity: str) -> RunResult:
         from .adapters import ADAPTERS
 
         adapter = ADAPTERS.get(goal_id)
         if adapter is None:
             raise ExecuteError(f"no executor adapter registered for {goal_id}")
-        return adapter(self.config, self.repo_root)
+        return adapter(self.config, self.repo_root, artifact_identity)
 
 
 def format_run_result(result: RunResult, *, repo_root: str | Path | None = None) -> str:
