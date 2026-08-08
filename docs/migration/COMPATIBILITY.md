@@ -159,6 +159,7 @@ out/artifacts/sw.program.image/nbody/<identity>/nbody_dump_real.asm
 Compatibility behavior:
 
 - `sw.program.native`, `sw.program.elf`, and `sw.program.image` still use `make -C sw/programs`;
+- artifact layout is owned by executor context, not by domain adapters;
 - Makefile accepts `OUT_DIR=<artifact-dir>` and exposes named `native`, `elf`, and `image` targets;
 - source inputs remain under `sw/programs/<program>/`;
 - generated software artifacts are no longer written to `sw/programs/<program>/` by `gpgpu run`;

@@ -289,6 +289,7 @@ Objective: move software artifact outputs for the current program adapters out o
 Scope:
 
 - use planner root artifact identity for `gpgpu run` output directories;
+- have `tools/gpgpu/executor.py` compute the artifact directory and pass it to adapters through `ExecutionContext`;
 - route `sw.program.native`, `sw.program.elf`, and `sw.program.image` outputs to `out/artifacts/<goal-id>/<program>/<identity>/`;
 - keep Makefile as the compatibility backend, but add `OUT_DIR` support and named `native`, `elf`, and `image` targets;
 - preserve current compiler/linker/objdump/awk behavior and generated filenames;

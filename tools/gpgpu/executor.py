@@ -20,13 +20,23 @@ class RunResult:
     stderr: str = ""
 
 
+@dataclass(frozen=True)
+class ExecutionContext:
+    config: ResolvedConfig
+    repo_root: Path
+    goal_id: str
+    artifact_identity: str
+    artifact_dir: Path
+
+
 class Executor:
     """Minimal legacy compatibility executor.
 
     The executor is a thin coordinator: it resolves a goal id to a registered
-    domain adapter, passes the resolved configuration and repository root, and
-    leaves workflow-specific command construction to adapter modules. Goals
-    without explicit characterization and adapters remain planner-only.
+    domain adapter, computes the normalized artifact directory for that goal
+    instance, and leaves workflow-specific command construction to adapter
+    modules. Goals without explicit characterization and adapters remain
+    planner-only.
     """
 
     def __init__(self, config: ResolvedConfig, *, repo_root: str | Path | None = None):
@@ -39,7 +49,17 @@ class Executor:
         adapter = ADAPTERS.get(goal_id)
         if adapter is None:
             raise ExecuteError(f"no executor adapter registered for {goal_id}")
-        return adapter(self.config, self.repo_root, artifact_identity)
+        return adapter(self._context_for(goal_id, artifact_identity))
+
+    def _context_for(self, goal_id: str, artifact_identity: str) -> ExecutionContext:
+        program = str(self.config.get("program"))
+        return ExecutionContext(
+            config=self.config,
+            repo_root=self.repo_root,
+            goal_id=goal_id,
+            artifact_identity=artifact_identity,
+            artifact_dir=self.repo_root / "out" / "artifacts" / goal_id / program / artifact_identity,
+        )
 
 
 def format_run_result(result: RunResult, *, repo_root: str | Path | None = None) -> str:
@@ -72,4 +92,4 @@ def _indent(text: str) -> str:
     return "\n".join(f"  {line}" for line in text.splitlines())
 
 
-__all__ = ["ExecuteError", "Executor", "RunResult", "format_run_result"]
+__all__ = ["ExecuteError", "ExecutionContext", "Executor", "RunResult", "format_run_result"]

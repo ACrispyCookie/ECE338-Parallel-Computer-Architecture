@@ -32,6 +32,13 @@ class ExecutorStructureTests(unittest.TestCase):
         self.assertFalse(hasattr(Executor, "_run_sw_program_elf"))
         self.assertFalse(hasattr(Executor, "_run_sw_program_image"))
 
+    def test_program_adapters_do_not_own_artifact_layout_policy(self):
+        adapter_source = (ROOT / "tools" / "gpgpu" / "adapters" / "sw_programs.py").read_text()
+
+        self.assertNotIn('"out"', adapter_source)
+        self.assertNotIn('"artifacts"', adapter_source)
+        self.assertNotIn("_artifact_dir", adapter_source)
+
 
 class ProgramAdapterTests(unittest.TestCase):
     program = "nbody"

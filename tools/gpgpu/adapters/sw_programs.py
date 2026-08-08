@@ -4,59 +4,51 @@ import os
 import subprocess
 from pathlib import Path
 
-from tools.gpgpu.config import ResolvedConfig
-from tools.gpgpu.executor import RunResult
+from tools.gpgpu.executor import ExecutionContext, RunResult
 
 
-def run_native(config: ResolvedConfig, repo_root: Path, artifact_identity: str) -> RunResult:
-    program = str(config.get("program"))
-    out_dir = _artifact_dir(repo_root, "sw.program.native", program, artifact_identity)
-    command = _make_command(program, out_dir, "native")
+def run_native(context: ExecutionContext) -> RunResult:
+    program = str(context.config.get("program"))
+    command = _make_command(program, context.artifact_dir, "native")
     return _run_make_artifacts(
-        goal_id="sw.program.native",
+        goal_id=context.goal_id,
         command=command,
-        repo_root=repo_root,
-        produced=(out_dir / f"{program}_x86",),
+        repo_root=context.repo_root,
+        produced=(context.artifact_dir / f"{program}_x86",),
         require_executable=True,
     )
 
 
-def run_elf(config: ResolvedConfig, repo_root: Path, artifact_identity: str) -> RunResult:
-    program = str(config.get("program"))
-    out_dir = _artifact_dir(repo_root, "sw.program.elf", program, artifact_identity)
-    command = _make_command(program, out_dir, "elf")
+def run_elf(context: ExecutionContext) -> RunResult:
+    program = str(context.config.get("program"))
+    command = _make_command(program, context.artifact_dir, "elf")
     return _run_make_artifacts(
-        goal_id="sw.program.elf",
+        goal_id=context.goal_id,
         command=command,
-        repo_root=repo_root,
+        repo_root=context.repo_root,
         produced=(
-            out_dir / f"{program}.elf",
-            out_dir / f"{program}.map",
+            context.artifact_dir / f"{program}.elf",
+            context.artifact_dir / f"{program}.map",
         ),
         require_executable=False,
     )
 
 
-def run_image(config: ResolvedConfig, repo_root: Path, artifact_identity: str) -> RunResult:
-    program = str(config.get("program"))
-    out_dir = _artifact_dir(repo_root, "sw.program.image", program, artifact_identity)
-    command = _make_command(program, out_dir, "image")
+def run_image(context: ExecutionContext) -> RunResult:
+    program = str(context.config.get("program"))
+    command = _make_command(program, context.artifact_dir, "image")
     return _run_make_artifacts(
-        goal_id="sw.program.image",
+        goal_id=context.goal_id,
         command=command,
-        repo_root=repo_root,
+        repo_root=context.repo_root,
         produced=(
-            out_dir / f"{program}_instructions.mem",
-            out_dir / f"{program}_dump_real.asm",
-            out_dir / f"{program}.elf",
-            out_dir / f"{program}.map",
+            context.artifact_dir / f"{program}_instructions.mem",
+            context.artifact_dir / f"{program}_dump_real.asm",
+            context.artifact_dir / f"{program}.elf",
+            context.artifact_dir / f"{program}.map",
         ),
         require_executable=False,
     )
-
-
-def _artifact_dir(repo_root: Path, goal_id: str, program: str, artifact_identity: str) -> Path:
-    return repo_root / "out" / "artifacts" / goal_id / program / artifact_identity
 
 
 def _make_command(program: str, out_dir: Path, target: str) -> tuple[str, ...]:
