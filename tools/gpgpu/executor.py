@@ -39,34 +39,50 @@ class Executor:
             return self._run_sw_program_native()
         if goal_id == "sw.program.elf":
             return self._run_sw_program_elf()
+        if goal_id == "sw.program.image":
+            return self._run_sw_program_image()
         raise ExecuteError(f"no executor adapter registered for {goal_id}")
 
     def _run_sw_program_native(self) -> RunResult:
         program = str(self.config.get("program"))
         command = ("make", "-C", "sw/programs", f"PROG={program}", "x86")
-        return self._run_make_artifact(
+        return self._run_make_artifacts(
             goal_id="sw.program.native",
             command=command,
-            produced=self.repo_root / "sw" / "programs" / program / f"{program}_x86",
+            produced=(self.repo_root / "sw" / "programs" / program / f"{program}_x86",),
             require_executable=True,
         )
 
     def _run_sw_program_elf(self) -> RunResult:
         program = str(self.config.get("program"))
         command = ("make", "-C", "sw/programs", f"PROG={program}", f"{program}/{program}.elf")
-        return self._run_make_artifact(
+        return self._run_make_artifacts(
             goal_id="sw.program.elf",
             command=command,
-            produced=self.repo_root / "sw" / "programs" / program / f"{program}.elf",
+            produced=(self.repo_root / "sw" / "programs" / program / f"{program}.elf",),
             require_executable=False,
         )
 
-    def _run_make_artifact(
+    def _run_sw_program_image(self) -> RunResult:
+        program = str(self.config.get("program"))
+        command = ("make", "-C", "sw/programs", f"PROG={program}", f"{program}/{program}_instructions.mem")
+        program_dir = self.repo_root / "sw" / "programs" / program
+        return self._run_make_artifacts(
+            goal_id="sw.program.image",
+            command=command,
+            produced=(
+                program_dir / f"{program}_instructions.mem",
+                program_dir / f"{program}_dump_real.asm",
+            ),
+            require_executable=False,
+        )
+
+    def _run_make_artifacts(
         self,
         *,
         goal_id: str,
         command: tuple[str, ...],
-        produced: Path,
+        produced: tuple[Path, ...],
         require_executable: bool,
     ) -> RunResult:
         completed = subprocess.run(
@@ -76,9 +92,10 @@ class Executor:
             capture_output=True,
             check=False,
         )
-        exists = produced.exists()
-        usable = exists and (not require_executable or os.access(produced, os.X_OK))
-        produced_tuple: tuple[Path, ...] = (produced,) if usable else ()
+        produced_tuple = tuple(
+            path for path in produced
+            if path.exists() and (not require_executable or os.access(path, os.X_OK))
+        )
         return RunResult(
             goal_id=goal_id,
             command=command,

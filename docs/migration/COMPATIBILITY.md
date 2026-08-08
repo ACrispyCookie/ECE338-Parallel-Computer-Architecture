@@ -89,6 +89,32 @@ Compatibility behavior:
 
 Known limitation: planner identity includes `program.optimization`, `program.march`, and `program.mabi`, but the legacy RISC-V Makefile target currently hardcodes `-O2 -march=rv32im -mabi=ilp32`. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
 
+## Milestone 10 program image compatibility adapter
+
+The instruction-memory image artifact adapter remains a direct legacy wrapper:
+
+```bash
+tools/gpgpu/gpgpu run sw.program.image --set program=nbody
+```
+
+It delegates to the legacy memory-image Makefile target instead of reimplementing objdump or awk extraction:
+
+```bash
+make -C sw/programs PROG=nbody nbody/nbody_instructions.mem
+```
+
+Compatibility behavior:
+
+- primary produced artifact stays at the legacy path `sw/programs/<program>/<program>_instructions.mem`;
+- supporting dump output may be produced at `sw/programs/<program>/<program>_dump_real.asm`;
+- upstream ELF and map outputs may be produced at `sw/programs/<program>/<program>.elf` and `sw/programs/<program>/<program>.map`;
+- no `out/` artifact is created;
+- the memory-image format and extraction pipeline are unchanged;
+- `test.program`, hardware goals, and demo goals remain unsupported by the executor until their own adapter milestones;
+- legacy scripts and `sw/programs/Makefile` are not modified.
+
+Known limitation: generated artifacts still live under `sw/programs/<program>/`. The tracked legacy `*_program.asm` snapshots must not be committed accidentally when compiler output changes. The `out/` root is reserved for a future generated-artifact migration milestone.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:

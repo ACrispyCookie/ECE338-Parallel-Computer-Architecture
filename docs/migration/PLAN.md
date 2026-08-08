@@ -203,35 +203,63 @@ Evidence:
 - native adapter invokes `make -C sw/programs ...`;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current implementation scope
+## Completed program-adapter milestone
 
 ### Milestone 9: RISC-V ELF compatibility adapter
 
 Objective: add the next narrow `gpgpu run` compatibility adapter for the existing RISC-V ELF build artifact.
 
-Scope:
+Implemented in commit `9de4947` on branch `gpgpu-planner-foundation`.
+
+Added/changed:
 
 - support `tools/gpgpu/gpgpu run sw.program.elf --set program=<program>`;
 - delegate to `make -C sw/programs PROG=<program> <program>/<program>.elf`;
 - verify the legacy ELF artifact at `sw/programs/<program>/<program>.elf`;
-- keep `sw.program.image` and hardware/demo goals unsupported by the executor;
+- keep `sw.program.image` and hardware/demo goals unsupported by the executor for that milestone;
 - document the current config/Makefile mismatch for `program.optimization`, `program.march`, and `program.mabi`.
+
+Evidence:
+
+- ELF adapter reports the exact legacy Make command;
+- ELF adapter produces `sw/programs/nbody/nbody.elf`;
+- unsupported `sw.program.image` still fails clearly before Milestone 10;
+- native adapter behavior is unchanged;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Current implementation scope
+
+### Milestone 10: program instruction-memory image compatibility adapter
+
+Objective: add the next narrow `gpgpu run` compatibility adapter for the existing RISC-V instruction-memory image artifact.
+
+Scope:
+
+- support `tools/gpgpu/gpgpu run sw.program.image --set program=<program>`;
+- delegate to `make -C sw/programs PROG=<program> <program>/<program>_instructions.mem`;
+- verify the legacy memory artifact at `sw/programs/<program>/<program>_instructions.mem`;
+- report the supporting dump artifact at `sw/programs/<program>/<program>_dump_real.asm` when produced;
+- keep composition/check/hardware/demo goals unsupported by the executor until their own milestones;
+- document that generated program artifacts still live under `sw/programs/<program>/`.
 
 Non-goals:
 
 - no Makefile rewrite;
-- no ELF/MAP relocation into `out/` yet;
-- no instruction-memory image adapter yet;
+- no generated-artifact relocation into `out/` yet;
+- no memory-image format change;
 - no UART, hardware, Vivado, or demo execution;
+- no `test.program` comparison goal;
 - no caching or artifact injection.
 
 Expected evidence:
 
-- ELF adapter reports the exact legacy Make command;
-- ELF adapter produces `sw/programs/nbody/nbody.elf`;
-- unsupported `sw.program.image` still fails clearly;
-- native adapter behavior is unchanged;
-- planner, executor, legacy characterization, and full discovery tests pass.
+- image adapter reports the exact legacy Make command;
+- image adapter produces `sw/programs/nbody/nbody_instructions.mem`;
+- image adapter reports `sw/programs/nbody/nbody_dump_real.asm` when produced;
+- unsupported `test.program` still fails clearly;
+- native and ELF adapter behavior is unchanged;
+- planner, executor, legacy characterization, and full discovery tests pass;
+- generated program artifacts are cleaned before commit.
 
 ## Future `executor.py` direction
 
