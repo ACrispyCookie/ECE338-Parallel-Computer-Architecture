@@ -265,7 +265,7 @@ Scope:
 - introduce `tools/gpgpu/adapters/` with a small goal-id adapter registry;
 - move software program adapter functions into `tools/gpgpu/adapters/sw_programs.py`;
 - keep `tools/gpgpu/executor.py` as a thin coordinator that dispatches by goal id;
-- move run-result formatting/types into a neutral module;
+- move run-result formatting/types back into `tools/gpgpu/executor.py` rather than keeping a premature one-purpose module;
 - keep all command behavior and output paths unchanged;
 - document that Makefile remains the backend for now, while a later Python-native backend remains possible;
 - document the future `gpgpu clean` subcommand model.
@@ -351,7 +351,7 @@ tools/gpgpu/adapters/
   demo.py
 ```
 
-`executor.py` owns generic execution concerns: adapter lookup, repository root, result formatting, error handling, and later dry-run/force/verbosity/service lifecycle behavior.
+`executor.py` owns generic execution concerns: adapter lookup, repository root, run-result type/formatting, error handling, and later dry-run/force/verbosity/service lifecycle behavior.
 
 Domain adapter modules own command construction and artifact verification for their area. Shared subprocess helpers may move to a common module when more than one adapter family needs them.
 

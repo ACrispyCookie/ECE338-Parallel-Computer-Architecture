@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from tools.gpgpu.config import ResolvedConfig
-from tools.gpgpu.run_result import RunResult
+from tools.gpgpu.executor import RunResult
 
 
 def run_native(config: ResolvedConfig, repo_root: Path) -> RunResult:
