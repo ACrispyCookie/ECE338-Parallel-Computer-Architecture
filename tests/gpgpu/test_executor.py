@@ -187,7 +187,7 @@ class GraphRunTests(unittest.TestCase):
         self.assertNotIn("RUNNING", rendered)
         self.assertNotIn("DONE", rendered)
 
-    def test_interactive_reporter_focuses_current_goal_with_spinner(self):
+    def test_interactive_reporter_replaces_spinner_with_completed_goal_area(self):
         config = self.config()
         plan = Planner(config).plan("sw.program.native")
         stream = io.StringIO()
@@ -207,11 +207,29 @@ class GraphRunTests(unittest.TestCase):
 
         rendered = stream.getvalue()
         self.assertEqual(summary.returncode, 0)
-        self.assertIn("[1/1] sw.program.native", rendered)
-        self.assertIn("⠋ running fake native", rendered)
-        self.assertIn("\r", rendered)
-        self.assertIn("✓ sw.program.native", rendered)
-        self.assertIn("Summary: 1 completed, 0 skipped, 0 failed", rendered)
+        self.assertIn("╭─ [1/1] sw.program.native", rendered)
+        self.assertIn("\r\033[2K│  ✓ completed", rendered)
+        self.assertIn("│  produced: native.artifact", rendered)
+        self.assertIn("╰─ 1 completed, 0 skipped, 0 failed", rendered)
+        self.assertNotIn("running fake native\n✓", rendered)
+
+    def test_interactive_reporter_uses_richer_color_for_goal_area(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.native")
+        stream = io.StringIO()
+
+        def native(context):
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+
+        Executor(config, adapters={"sw.program.native": native}).run_plan(
+            plan,
+            reporter=InteractiveRunReporter(stream, repo_root=ROOT, color=True),
+        )
+
+        rendered = stream.getvalue()
+        self.assertIn("\033[1;36m╭─", rendered)
+        self.assertIn("\033[32m✓ completed", rendered)
+        self.assertIn("\033[2m", rendered)
 
     def test_cli_progress_plain_uses_compact_reporter(self):
         stdout = io.StringIO()

@@ -345,7 +345,7 @@ Scope:
 
 - add a run reporter/event-sink layer separate from adapter execution;
 - support deterministic compact progress output for non-TTY, `--progress plain`, and tests;
-- support a TTY-oriented reporter with a current-goal spinner/progress line;
+- support a TTY-oriented reporter with a single mutable current-goal area that clears and replaces the spinner/status line on completion or failure;
 - add `--progress auto|plain|tty`;
 - keep completed goals compact, showing status, elapsed time, and produced artifact basenames;
 - keep skipped internal goals compact with an explicit reason;

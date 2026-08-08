@@ -187,7 +187,9 @@ Compatibility behavior:
 - dependency order, stop-on-failure behavior, and adapter commands are unchanged from Milestone 13;
 - compact progress output is now the default for non-TTY runs and captured test output;
 - `--progress plain` forces deterministic compact output;
-- `--progress tty` forces the current-goal-focused interactive renderer with a spinner/progress line;
+- `--progress tty` forces the current-goal-focused interactive renderer with a single mutable goal area;
+- the interactive renderer clears and replaces the spinner/status line on completion or failure, rather than leaving a stale loading line followed by a separate completion line;
+- interactive color mode styles the goal header, status, and secondary details for readability;
 - completed goals collapse to one line with status, elapsed time, and produced artifact basenames;
 - skipped internal planner-only goals are retained as compact records with a reason;
 - failed goals expand the command, stdout, stderr, and stop reasons for dependents;
