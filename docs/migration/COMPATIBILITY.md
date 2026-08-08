@@ -115,6 +115,29 @@ Compatibility behavior:
 
 Known limitation: generated artifacts still live under `sw/programs/<program>/`. The tracked legacy `*_program.asm` snapshots must not be committed accidentally when compiler output changes. The `out/` root is reserved for a future generated-artifact migration milestone.
 
+## Milestone 11 executor adapter registry
+
+Milestone 11 is a structure-only cleanup of the new control-plane executor:
+
+```text
+tools/gpgpu/executor.py
+tools/gpgpu/adapters/
+  __init__.py
+  sw_programs.py
+```
+
+Compatibility behavior:
+
+- `sw.program.native`, `sw.program.elf`, and `sw.program.image` still call the same Makefile commands as before;
+- output paths remain in legacy `sw/programs/<program>/` locations;
+- no `out/` artifact migration occurs;
+- no Makefile targets or flags change;
+- unsupported goals continue to fail with `no executor adapter registered for <goal>`.
+
+Backend policy: keep Makefile as the compatibility backend for now. A later milestone may either make Makefile a thinner typed backend that receives variables from `gpgpu`, or switch specific workflows to Python-native command execution after parity tests exist.
+
+Clean policy: do not add broad or implicit cleaning to `gpgpu run`. A future `gpgpu clean <goal>` should remove only artifacts owned by a normalized goal instance, and `--force` should rebuild scoped artifacts rather than calling broad `make clean`.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:

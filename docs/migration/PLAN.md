@@ -227,13 +227,15 @@ Evidence:
 - native adapter behavior is unchanged;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current implementation scope
+## Completed program-adapter milestone
 
 ### Milestone 10: program instruction-memory image compatibility adapter
 
 Objective: add the next narrow `gpgpu run` compatibility adapter for the existing RISC-V instruction-memory image artifact.
 
-Scope:
+Implemented in commit `09eb04e` on branch `gpgpu-planner-foundation`.
+
+Added/changed:
 
 - support `tools/gpgpu/gpgpu run sw.program.image --set program=<program>`;
 - delegate to `make -C sw/programs PROG=<program> <program>/<program>_instructions.mem`;
@@ -242,16 +244,7 @@ Scope:
 - keep composition/check/hardware/demo goals unsupported by the executor until their own milestones;
 - document that generated program artifacts still live under `sw/programs/<program>/`.
 
-Non-goals:
-
-- no Makefile rewrite;
-- no generated-artifact relocation into `out/` yet;
-- no memory-image format change;
-- no UART, hardware, Vivado, or demo execution;
-- no `test.program` comparison goal;
-- no caching or artifact injection.
-
-Expected evidence:
+Evidence:
 
 - image adapter reports the exact legacy Make command;
 - image adapter produces `sw/programs/nbody/nbody_instructions.mem`;
@@ -261,14 +254,88 @@ Expected evidence:
 - planner, executor, legacy characterization, and full discovery tests pass;
 - generated program artifacts are cleaned before commit.
 
+## Current implementation scope
+
+### Milestone 11: executor adapter registry and artifact-policy documentation
+
+Objective: clean up the executor structure now that three program adapters exist, and record the Makefile/backend, `out/`, and cleaning policies before changing artifact locations.
+
+Scope:
+
+- introduce `tools/gpgpu/adapters/` with a small goal-id adapter registry;
+- move software program adapter functions into `tools/gpgpu/adapters/sw_programs.py`;
+- keep `tools/gpgpu/executor.py` as a thin coordinator that dispatches by goal id;
+- move run-result formatting/types into a neutral module;
+- keep all command behavior and output paths unchanged;
+- document that Makefile remains the backend for now, while a later Python-native backend remains possible;
+- document the future `gpgpu clean` subcommand model.
+
+Non-goals:
+
+- no Makefile rewrite;
+- no generated-artifact relocation into `out/` yet;
+- no new executable goals;
+- no graph executor;
+- no cache implementation;
+- no clean subcommand implementation yet.
+
+Expected evidence:
+
+- adapter registry exposes `sw.program.native`, `sw.program.elf`, and `sw.program.image`;
+- executor no longer owns domain-specific `_run_sw_program_*` methods;
+- native, ELF, and image adapters still execute the exact same Make commands;
+- unsupported goals still fail clearly;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Makefile backend and future Python backend direction
+
+For now, the control plane keeps the existing Makefile as the implementation backend for software artifacts. The goal graph describes semantic operations such as `sw.program.elf` and `sw.program.image`; the adapter invokes the corresponding existing Make target as the compatibility implementation.
+
+Current policy:
+
+- use Makefile targets for compatibility milestones;
+- do not reimplement compiler, objdump, linker, or awk behavior in Python while parity is still being established;
+- record mismatches between typed planner settings and Makefile hardcoded values instead of silently changing behavior;
+- keep generated artifacts in legacy locations until an explicit `out/` migration milestone.
+
+Possible future policy:
+
+- either keep Makefile as a thin backend that accepts typed variables from `gpgpu`, such as `OUT_DIR`, `OPT`, `MARCH`, and `MABI`;
+- or switch specific adapters to Python-native commands once legacy behavior is characterized and parity tests exist.
+
+The decision should be per workflow. Program builds may move to Python earlier than Vivado/RTL workflows if that reduces duplication safely, but no backend switch should happen without characterization and parity evidence.
+
+## Future `gpgpu clean` direction
+
+Cleaning must be explicit and goal-instance scoped. `gpgpu run` should not silently call broad `make clean`, because broad clean can delete unrelated generated artifacts and can dirty tracked legacy generated snapshots.
+
+Future command shape:
+
+```bash
+gpgpu clean <goal> --set program=nbody
+gpgpu clean sw.program.image --profile zed-demo
+gpgpu run sw.program.image --force --set program=nbody
+```
+
+Policy:
+
+- `gpgpu clean <goal>` removes only artifacts owned by the normalized goal instance;
+- `--force` rebuilds only the requested artifact instance and its necessary dependencies, not the whole source tree;
+- action goals such as board configuration and kernel load are not cleaned through artifact deletion;
+- service goals require lifecycle cleanup, not file deletion;
+- source-tree legacy artifacts require extra caution until they move under `out/`;
+- once artifacts live under `out/artifacts/<goal>/<program>/<identity>/`, clean can safely remove that directory.
+
+Near-term implementation should keep using targeted test cleanup only. Do not add the `clean` command until artifact ownership and `out/` layout are defined.
+
 ## Future `executor.py` direction
 
-The executor should stay small while adapters are few, but it must not grow into a long unstructured `if goal_id == ...` chain.
+The executor should stay small while adapters are few, and must not grow into a long unstructured `if goal_id == ...` chain.
 
-Near-term direction:
+Current/near-term direction:
 
 - keep `executor.py` as a thin coordinator;
-- introduce a tiny adapter registry when the next few adapters accumulate;
+- use a tiny adapter registry keyed by goal id;
 - keep one adapter per explicitly characterized workflow;
 - keep unsupported goals failing clearly until they have adapters.
 
@@ -284,9 +351,9 @@ tools/gpgpu/adapters/
   demo.py
 ```
 
-`executor.py` should own generic execution concerns: adapter lookup, repository root, subprocess execution, stdout/stderr capture, result formatting, error handling, and later dry-run/force/verbosity/service lifecycle behavior.
+`executor.py` owns generic execution concerns: adapter lookup, repository root, result formatting, error handling, and later dry-run/force/verbosity/service lifecycle behavior.
 
-Domain adapter modules should own command construction and artifact verification for their area.
+Domain adapter modules own command construction and artifact verification for their area. Shared subprocess helpers may move to a common module when more than one adapter family needs them.
 
 Long-term direction: executor should walk a validated planned graph in dependency order, cache-skip only compatible artifact goals, never cache-skip action goals, and manage service lifecycles explicitly.
 
@@ -324,12 +391,13 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Complete Milestone 9 RISC-V ELF adapter.
-2. Add `sw.program.image` compatibility adapter after characterizing generated assembly and memory-image artifacts.
-3. Decide when generated program artifacts begin moving from `sw/programs/*` into `out/`.
-4. Connect RTL test goals behind adapters only after characterization.
-5. Connect UART/board action goals behind explicit hardware-state policies.
-6. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
+1. Complete Milestone 11 executor adapter registry and artifact-policy documentation.
+2. Decide and implement generated software artifact placement under `out/`.
+3. Add an explicit `gpgpu clean` design/implementation milestone after artifact ownership is defined.
+4. Consider `test.program` as a check goal for native-vs-image comparison.
+5. Connect RTL test goals behind adapters only after characterization.
+6. Connect UART/board action goals behind explicit hardware-state policies.
+7. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
 
 ## Rollback
 

@@ -14,6 +14,23 @@ sys.path.insert(0, str(ROOT))
 from tools.gpgpu.cli import main
 
 
+class ExecutorStructureTests(unittest.TestCase):
+    def test_program_adapters_are_registered_by_goal_id(self):
+        from tools.gpgpu.adapters import ADAPTERS
+
+        self.assertIn("sw.program.native", ADAPTERS)
+        self.assertIn("sw.program.elf", ADAPTERS)
+        self.assertIn("sw.program.image", ADAPTERS)
+        self.assertNotIn("test.program", ADAPTERS)
+
+    def test_executor_does_not_own_domain_specific_program_methods(self):
+        from tools.gpgpu.executor import Executor
+
+        self.assertFalse(hasattr(Executor, "_run_sw_program_native"))
+        self.assertFalse(hasattr(Executor, "_run_sw_program_elf"))
+        self.assertFalse(hasattr(Executor, "_run_sw_program_image"))
+
+
 class ProgramAdapterTests(unittest.TestCase):
     program = "nbody"
 
