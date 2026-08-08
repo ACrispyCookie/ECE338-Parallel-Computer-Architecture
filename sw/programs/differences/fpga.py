@@ -1,6 +1,6 @@
 """FPGA execution adapter for the adjacent-differences program.
 
-This adapter targets the refactored programs/fpga_run.py API.
+This adapter targets the refactored sw/programs/fpga_run.py API.
 
 differences-specific ABI
 ------------------------

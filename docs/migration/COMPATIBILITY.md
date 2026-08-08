@@ -25,20 +25,20 @@ tests/legacy/test_legacy_cli_characterization.py
 Covered entry points:
 
 - `./run.sh --help` exits 0 and exposes build targets, `--fpga`, `--kernel-calls`, and adapter-forwarding guidance.
-- `./programs/run.sh --help` exits 0 and has the same key generic workflow surface as the root wrapper.
-- `python3 programs/fpga_run.py --help` exits 0 and exposes common UART loop options: `--program`, `--adapter-help`, `--kernel-calls`, `--args-offset`, and `--skip-load-imem`.
+- `./sw/programs/run.sh --help` exits 0 and has the same key generic workflow surface as the root wrapper.
+- `python3 sw/programs/fpga_run.py --help` exits 0 and exposes common UART loop options: `--program`, `--adapter-help`, `--kernel-calls`, `--args-offset`, and `--skip-load-imem`.
 - `python3 test/host_uart_tester.py --help` exits 0 and exposes hardware test options: `--port`, `--dmem-words`, `--dmem-offset`, `--check-words`.
-- `host/baremetal/gpgpu_uart.py` imports without opening serial and remains the UART protocol reference for `DEPTH`, `PROMPT`, word normalization, memory-file reads, and RET trimming.
+- `sw/host/baremetal/gpgpu_uart.py` imports without opening serial and remains the UART protocol reference for `DEPTH`, `PROMPT`, word normalization, memory-file reads, and RET trimming.
 
 Duplicated/shared UART and kernel-run observations before adapter work:
 
-- `host/baremetal/gpgpu_uart.py` owns the protocol implementation: prompt handling, status parsing, ASCII/binary IMEM/DMEM load/dump, `run`, and `done`.
-- `programs/fpga_run.py` imports that protocol layer and owns the common program FPGA loop: load IMEM once, adapter-provided DMEM initialization, GPGPU_ARGS normalization/write-if-changed, kernel run, DMEM dump, adapter output processing, and `done` per call.
+- `sw/host/baremetal/gpgpu_uart.py` owns the protocol implementation: prompt handling, status parsing, ASCII/binary IMEM/DMEM load/dump, `run`, and `done`.
+- `sw/programs/fpga_run.py` imports that protocol layer and owns the common program FPGA loop: load IMEM once, adapter-provided DMEM initialization, GPGPU_ARGS normalization/write-if-changed, kernel run, DMEM dump, adapter output processing, and `done` per call.
 - `test/host_uart_tester.py` imports `DEPTH`, `GpgpuUartMonitor`, `read_mem_file`, and `trim_program_at_ret` from the protocol layer, but still owns a separate hardware-test loop for load/run/dump/compare/done.
 - The current shared ABI/runtime constants include `DEPTH=2048`, UART baud default `115200`, `GPU_ARGS_BASE_WORDS=0x40/4`, `GPU_ARGS_WORDS=4`, and `kernel_calls` handling in the common runner and program adapters.
-- Program adapters under `programs/*/fpga.py` each receive `kernel_calls`; `mandelbrot` adds stronger semantic constraints by requiring kernel calls to match frame/height-derived counts.
+- Program adapters under `sw/programs/*/fpga.py` each receive `kernel_calls`; `mandelbrot` adds stronger semantic constraints by requiring kernel calls to match frame/height-derived counts.
 
-Conclusion for future wrapper work: keep `host/baremetal/gpgpu_uart.py` as the protocol reference and treat `programs/fpga_run.py` plus `test/host_uart_tester.py` as behavior oracles. Do not extract or consolidate their loops until a wrapper/adaptor milestone compares command behavior against these characterization tests.
+Conclusion for future wrapper work: keep `sw/host/baremetal/gpgpu_uart.py` as the protocol reference and treat `sw/programs/fpga_run.py` plus `test/host_uart_tester.py` as behavior oracles. Do not extract or consolidate their loops until a wrapper/adaptor milestone compares command behavior against these characterization tests.
 
 ## Milestone 7 native compatibility adapter
 
@@ -51,18 +51,38 @@ tools/gpgpu/gpgpu run sw.program.native --set program=nbody
 It delegates to the legacy native Makefile target instead of reimplementing compiler flags:
 
 ```bash
-make -C programs PROG=nbody x86
+make -C sw/programs PROG=nbody x86
 ```
 
 Compatibility behavior:
 
-- produced artifact stays at the legacy path `programs/<program>/<program>_x86`;
+- produced artifact stays at the legacy path `sw/programs/<program>/<program>_x86`;
 - no `out/` artifact is created;
-- the native program is not run, so no `programs/<program>/data.csv` is produced;
+- the native program is not run, so no `sw/programs/<program>/data.csv` is produced;
 - unsupported executable goals fail with `no executor adapter registered for <goal>`;
-- legacy scripts and `programs/Makefile` are not modified.
+- legacy scripts and `sw/programs/Makefile` are not modified.
 
 Known limitation: planner identity includes `program.optimization`, but the legacy native Makefile target currently uses `NATIVE_CFLAGS = -O2` and does not consume planner config. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
+
+## Milestone 8 layout split
+
+The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:
+
+```text
+hw/rtl/        former src/
+sw/host/       former host/ minus stale linux host driver
+sw/programs/   former programs/
+out/           ignored generated-output root, with tracked out/.gitkeep
+```
+
+Compatibility behavior after the move:
+
+- root `./run.sh` routes to `sw/programs/run.sh`;
+- `tools/gpgpu/gpgpu run sw.program.native` delegates to `make -C sw/programs ...`;
+- characterization tests use `sw/programs/fpga_run.py` and `sw/host/baremetal/gpgpu_uart.py`;
+- old `host/linux/host.py` was deleted with explicit user approval because it was stale relative to the current UART monitor.
+
+No compatibility wrappers were kept under root `programs/`, `host/`, or `src/`; this is acceptable on the feature branch before merge.
 
 ## Legacy workflows requiring characterization
 
@@ -73,8 +93,8 @@ Representative commands:
 ```bash
 ./run.sh --help
 ./run.sh -p nbody x86 --x86 --no-visualize
-make -C programs PROG=nbody riscv
-make -C programs PROG=nbody nbody/nbody_instructions.mem
+make -C sw/programs PROG=nbody riscv
+make -C sw/programs PROG=nbody nbody/nbody_instructions.mem
 ```
 
 Evidence to capture:
@@ -164,8 +184,8 @@ Evidence to capture:
 Representative source files to compare before creating adapters:
 
 ```text
-host/baremetal/gpgpu_uart.py
-programs/fpga_run.py
+sw/host/baremetal/gpgpu_uart.py
+sw/programs/fpga_run.py
 test/host_uart_tester.py
 demo/interactive.py
 demo/interactive_3d.py
@@ -180,13 +200,13 @@ Compatibility evidence to capture:
 - timeout/error handling;
 - output parsing and comparison behavior.
 
-Refactoring target: keep `host/baremetal/gpgpu_uart.py` as the protocol reference initially, then extract shared board-kernel execution helpers only after `programs/fpga_run.py` and `test/host_uart_tester.py` have characterization tests proving equivalent behavior.
+Refactoring target: keep `sw/host/baremetal/gpgpu_uart.py` as the protocol reference initially, then extract shared board-kernel execution helpers only after `sw/programs/fpga_run.py` and `test/host_uart_tester.py` have characterization tests proving equivalent behavior.
 
 ## New planner goals and intended legacy adapters
 
 Current planned mapping:
 
-- `sw.program.native` -> adapter around native `programs/Makefile` flow.
+- `sw.program.native` -> adapter around native `sw/programs/Makefile` flow.
 - `sw.program.elf` -> adapter around RISC-V compiler step.
 - `sw.program.image` -> adapter around objdump and memory-image extraction.
 - `test.rtl` -> adapter around `test/run_tests.sh` or lower-level test Makefile stages, with internal `hw.rtl.assemble` and `hw.rtl.sim_executable` support goals.
@@ -202,5 +222,5 @@ No deletion approved.
 
 Potential future retirement candidates remain only candidates until evidence is collected:
 
-- `host/linux/host.py` after replacement and parity.
+- `sw/host/linux/host.py (deleted in Milestone 8)` after replacement and parity.
 - tracked generated assembly snapshots only after confirming their role.

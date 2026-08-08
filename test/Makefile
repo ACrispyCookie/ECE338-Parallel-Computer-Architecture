@@ -12,7 +12,7 @@ TB ?= tb_GPGPU.v
 OUT ?= main
 
 # Include/source directories
-SRC_DIR := ../src
+SRC_DIR := ../hw/rtl
 
 VERILOG_SOURCES := \
 	$(SRC_DIR)/*.vh \

@@ -13,6 +13,16 @@ ROOT = Path(__file__).resolve().parents[2]
 class LegacyCliCharacterizationTests(unittest.TestCase):
     maxDiff = None
 
+    def test_domain_layout_roots_exist_after_split(self):
+        self.assertTrue((ROOT / "hw" / "rtl").is_dir())
+        self.assertTrue((ROOT / "sw" / "host" / "baremetal").is_dir())
+        self.assertTrue((ROOT / "sw" / "programs").is_dir())
+        self.assertTrue((ROOT / "out" / ".gitkeep").is_file())
+        self.assertFalse((ROOT / "src").exists())
+        self.assertFalse((ROOT / "host").exists())
+        self.assertFalse((ROOT / "programs").exists())
+        self.assertFalse((ROOT / "sw" / "host" / "linux").exists())
+
     def run_cmd(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             list(args),
@@ -32,7 +42,7 @@ class LegacyCliCharacterizationTests(unittest.TestCase):
 
     def test_programs_run_help_matches_root_entry_point_surface(self):
         root_help = self.run_cmd("./run.sh", "--help")
-        programs_help = self.run_cmd("./programs/run.sh", "--help")
+        programs_help = self.run_cmd("./sw/programs/run.sh", "--help")
         self.assertEqual(programs_help.returncode, 0, programs_help.stderr)
         for marker in (
             "Optional build targets:",
@@ -45,9 +55,9 @@ class LegacyCliCharacterizationTests(unittest.TestCase):
             self.assertIn(marker, programs_help.stdout)
 
     def test_fpga_run_help_characterizes_common_uart_loop_options(self):
-        result = self.run_cmd(sys.executable, "programs/fpga_run.py", "--help")
+        result = self.run_cmd(sys.executable, "sw/programs/fpga_run.py", "--help")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Run a programs/<program> kernel on the FPGA over UART", result.stdout)
+        self.assertIn("Run a sw/programs/<program> kernel on the FPGA over UART", result.stdout)
         self.assertIn("--program PROGRAM", result.stdout)
         self.assertIn("--adapter-help", result.stdout)
         self.assertIn("--kernel-calls KERNEL_CALLS", result.stdout)
@@ -64,7 +74,7 @@ class LegacyCliCharacterizationTests(unittest.TestCase):
         self.assertIn("--check-words CHECK_WORDS", result.stdout)
 
     def test_uart_protocol_module_imports_without_opening_serial(self):
-        baremetal = ROOT / "host" / "baremetal"
+        baremetal = ROOT / "sw" / "host" / "baremetal"
         sys.path.insert(0, str(baremetal))
         try:
             import gpgpu_uart  # type: ignore[import-not-found]
@@ -80,12 +90,12 @@ class LegacyCliCharacterizationTests(unittest.TestCase):
         self.assertEqual(gpgpu_uart.trim_program_at_ret(["00000013", "00008067", "deadbeef"]), ["00000013", "00008067"])
 
     def test_fpga_run_common_constants_match_uart_protocol_assumptions(self):
-        baremetal = ROOT / "host" / "baremetal"
+        baremetal = ROOT / "sw" / "host" / "baremetal"
         sys.path.insert(0, str(baremetal))
         module_name = "legacy_fpga_run_for_test"
-        spec = importlib.util.spec_from_file_location(module_name, ROOT / "programs" / "fpga_run.py")
+        spec = importlib.util.spec_from_file_location(module_name, ROOT / "sw" / "programs" / "fpga_run.py")
         if spec is None or spec.loader is None:
-            self.fail("Could not create import spec for programs/fpga_run.py")
+            self.fail("Could not create import spec for sw/programs/fpga_run.py")
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         try:

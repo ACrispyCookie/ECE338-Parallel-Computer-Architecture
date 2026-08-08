@@ -18,7 +18,7 @@ class NativeProgramAdapterTests(unittest.TestCase):
     program = "nbody"
 
     def setUp(self):
-        self.native_exe = ROOT / "programs" / self.program / f"{self.program}_x86"
+        self.native_exe = ROOT / "sw" / "programs" / self.program / f"{self.program}_x86"
         self.out_native = ROOT / "out" / f"{self.program}_x86"
         self.native_exe.unlink(missing_ok=True)
         self.out_native.unlink(missing_ok=True)
@@ -52,16 +52,16 @@ class NativeProgramAdapterTests(unittest.TestCase):
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("Run: sw.program.native", rendered)
-        self.assertIn("make -C programs PROG=nbody x86", rendered)
+        self.assertIn("make -C sw/programs PROG=nbody x86", rendered)
         self.assertIn("Produced:", rendered)
-        self.assertIn("programs/nbody/nbody_x86", rendered)
+        self.assertIn("sw/programs/nbody/nbody_x86", rendered)
         self.assertTrue(self.native_exe.exists())
         self.assertTrue(os.access(self.native_exe, os.X_OK))
         self.assertFalse(self.out_native.exists())
 
     def test_native_adapter_does_not_run_program_or_create_data_csv(self):
         self.require_native_tools()
-        data_csv = ROOT / "programs" / self.program / "data.csv"
+        data_csv = ROOT / "sw" / "programs" / self.program / "data.csv"
         data_csv.unlink(missing_ok=True)
         try:
             stdout = io.StringIO()

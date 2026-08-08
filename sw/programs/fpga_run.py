@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generic FPGA/UART execution loop for programs/<program> kernels.
+"""Generic FPGA/UART execution loop for sw/programs/<program> kernels.
 
 This runner owns only the common host-side UART flow:
 
@@ -13,7 +13,7 @@ This runner owns only the common host-side UART flow:
 8. send READ_DONE so the cores return to LOADING
 9. repeat for --kernel-calls launches
 
-Program-specific logic belongs in programs/<program>/fpga.py.
+Program-specific logic belongs in sw/programs/<program>/fpga.py.
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 PROGRAMS_DIR = Path(__file__).resolve().parent
-BAREMETAL_DIR = REPO_ROOT / "host" / "baremetal"
+BAREMETAL_DIR = REPO_ROOT / "sw" / "host" / "baremetal"
 
 sys.path.insert(0, str(BAREMETAL_DIR))
 
@@ -40,7 +40,7 @@ from gpgpu_uart import GpgpuUartMonitor, read_mem_file  # noqa: E402
 #
 #   from fpga_run import ProgramAdapter, DmemWindow
 #
-# and this file is executed as `python programs/fpga_run.py`, then its runtime
+# and this file is executed as `python sw/programs/fpga_run.py`, then its runtime
 # module name is `__main__`, not `fpga_run`. This alias prevents Python from
 # importing a second copy of this file.
 sys.modules.setdefault("fpga_run", sys.modules[__name__])
@@ -77,7 +77,7 @@ class DmemWindow:
 class ProgramAdapter:
     """Base class for program-specific FPGA adapters.
 
-    Subclasses should live in programs/<program>/fpga.py and define:
+    Subclasses should live in sw/programs/<program>/fpga.py and define:
 
         class ProgramAdapter(fpga_run.ProgramAdapter):
             ...
@@ -280,10 +280,10 @@ def load_adapter(program: str) -> ProgramAdapter:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run a programs/<program> kernel on the FPGA over UART"
+        description="Run a sw/programs/<program> kernel on the FPGA over UART"
     )
 
-    parser.add_argument("-p", "--program", required=True, help="Program directory under programs/")
+    parser.add_argument("-p", "--program", required=True, help="Program directory under sw/programs/")
     parser.add_argument("--adapter-help", action="store_true", help="Show adapter-specific arguments and exit")
     parser.add_argument("--port", default=None, help="Serial port, e.g. /dev/ttyUSB1")
     parser.add_argument("--baud", type=int, default=115200, help="UART baud rate")

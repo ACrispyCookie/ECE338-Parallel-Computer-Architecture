@@ -153,44 +153,20 @@ Implemented in commit `0de03ba` on branch `gpgpu-planner-foundation`.
 Evidence:
 
 - root `./run.sh --help` is characterized;
-- `programs/run.sh --help` is compared with the root wrapper surface;
-- `programs/fpga_run.py --help` is characterized;
+- `sw/programs/run.sh --help` is compared with the root wrapper surface;
+- `sw/programs/fpga_run.py --help` is characterized;
 - `test/host_uart_tester.py --help` is characterized;
-- `host/baremetal/gpgpu_uart.py` imports without opening serial;
+- `sw/host/baremetal/gpgpu_uart.py` imports without opening serial;
 - shared UART constants/helpers are recorded before adapter work;
 - duplicated UART/kernel-run logic findings are documented.
-
-## Current implementation scope
 
 ### Milestone 7: first native compatibility adapter
 
 Objective: add the first narrow `gpgpu run` compatibility adapter for a non-hardware artifact goal while preserving legacy behavior.
 
-Files expected to change:
+Implemented in commit `b444ed0` on branch `gpgpu-planner-foundation`.
 
-- `tools/gpgpu/cli.py`
-- `tools/gpgpu/executor.py`
-- `tests/gpgpu/test_executor.py`
-- `docs/migration/PLAN.md`
-- `docs/migration/COMPATIBILITY.md`
-
-Scope:
-
-- support only `gpgpu run sw.program.native`;
-- delegate to `make -C programs PROG=<program> x86`;
-- verify the legacy executable at `programs/<program>/<program>_x86`;
-- unsupported goals fail clearly with no registered-adapter message.
-
-Non-goals:
-
-- no legacy-script rename, move, rewrite, or deletion;
-- no native program execution or `data.csv` generation;
-- no RISC-V compiler, UART, Vivado, RTL simulation, or demo execution;
-- no artifact relocation to `out/`;
-- no caching or artifact injection;
-- no broad executor framework beyond this one adapter.
-
-Expected evidence:
+Evidence:
 
 - unsupported `run` goal fails clearly;
 - native adapter invokes the exact legacy Make command;
@@ -199,9 +175,42 @@ Expected evidence:
 - native adapter does not run the program or create `data.csv`;
 - planner, legacy characterization, executor, and full discovery tests pass.
 
+## Current implementation scope
+
+### Milestone 8: split hardware/software trees and introduce `out/`
+
+Objective: establish the repository domain layout before adding more workflow adapters.
+
+Scope:
+
+- move RTL from `src/` to `hw/rtl/`;
+- move host code from `host/` to `sw/host/`;
+- move program code from `programs/` to `sw/programs/`;
+- delete stale `host/linux/host.py` with explicit user approval;
+- keep `test/` in place for now;
+- keep `tools/`, `demo/`, `config/`, and `docs/` as top-level roots;
+- introduce ignored `out/` with tracked `out/.gitkeep`.
+
+Non-goals:
+
+- no test-to-tests migration yet;
+- no docs history rewrite yet;
+- no compatibility shims for removed root `programs/`, `host/`, or `src/` paths;
+- no generated artifact migration into `out/` yet;
+- no Vivado, UART, or RISC-V compiler execution.
+
+Expected evidence:
+
+- domain-layout test proves `hw/rtl`, `sw/host/baremetal`, `sw/programs`, and `out/.gitkeep` exist;
+- old root `src`, `host`, and `programs` paths are gone;
+- stale `sw/host/linux` is gone;
+- root `run.sh` routes to `sw/programs/run.sh`;
+- native adapter invokes `make -C sw/programs ...`;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
 ## Intended next milestones
 
-1. Complete Milestone 7 first native compatibility adapter.
+1. Complete Milestone 8 domain layout split.
 2. Decide whether the next wrapper should target `sw.program.elf`, `sw.program.image`, or a native run/check goal.
 3. Connect program/toolchain goals behind adapters only after characterization.
 4. Connect RTL test goals behind adapters only after characterization.

@@ -78,8 +78,8 @@ Existing script filenames stay unchanged until characterized. Better conceptual 
 
 Noted future cleanup candidates:
 
-- `host/baremetal/gpgpu_uart.py`: board UART monitor/client library.
-- `programs/fpga_run.py`: board kernel runner / program adapter runner.
+- `sw/host/baremetal/gpgpu_uart.py`: board UART monitor/client library.
+- `sw/programs/fpga_run.py`: board kernel runner / program adapter runner.
 - `test/host_uart_tester.py`: hardware-in-the-loop test runner.
 
 ## Parameter scopes

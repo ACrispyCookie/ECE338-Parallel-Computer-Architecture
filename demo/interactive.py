@@ -3,7 +3,7 @@
 
 This is intentionally independent of the future nbody FPGA adapter.  It gives
 us the browser/controls path now with a deterministic software backend; once
-programs/nbody/fpga.py exists, an FPGA backend can be wired in without
+sw/programs/nbody/fpga.py exists, an FPGA backend can be wired in without
 changing the three.js frontend protocol.
 
 Controls in the browser:
@@ -34,10 +34,10 @@ from urllib.parse import parse_qs, urlparse
 
 DEMO_DIR = Path(__file__).resolve().parent
 REPO_ROOT = DEMO_DIR.parent
-PROGRAM_DIR = REPO_ROOT / "programs" / "nbody"
+PROGRAM_DIR = REPO_ROOT / "sw" / "programs" / "nbody"
 VENDOR_DIR = DEMO_DIR / "vendor"
 DATASET_DIR = PROGRAM_DIR / "datasets"
-BAREMETAL_DIR = REPO_ROOT / "host" / "baremetal"
+BAREMETAL_DIR = REPO_ROOT / "sw" / "host" / "baremetal"
 if str(BAREMETAL_DIR) not in sys.path:
     sys.path.insert(0, str(BAREMETAL_DIR))
 
@@ -389,7 +389,7 @@ class FpgaNbody3DBackend(Backend):
             from gpgpu_uart import GpgpuUartMonitor, read_mem_file
         except ImportError as exc:
             raise RuntimeError(
-                "FPGA backend requires host/baremetal/gpgpu_uart.py and pyserial. "
+                "FPGA backend requires sw/host/baremetal/gpgpu_uart.py and pyserial. "
                 "Install pyserial in the active environment if import failed because serial is missing."
             ) from exc
 
@@ -1096,7 +1096,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dataset",
         default="default",
-        help="Fake-backend initial condition dataset name/path (default: default). Names are read from programs/nbody-3d/datasets/.",
+        help="Fake-backend initial condition dataset name/path (default: default). Names are read from sw/programs/nbody-3d/datasets/.",
     )
     parser.add_argument("--http-host", default=DEFAULT_HTTP_HOST)
     parser.add_argument("--http-port", type=int, default=DEFAULT_HTTP_PORT)

@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROGRAMS_DIR="$REPO_ROOT/programs"
+PROGRAMS_DIR="$REPO_ROOT/sw/programs"
 PROGRAM="nbody"
 NBODY_DIR="$PROGRAMS_DIR/$PROGRAM"
 

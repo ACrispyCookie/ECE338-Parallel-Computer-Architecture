@@ -9,3 +9,5 @@ __pycache__
 SSOT.md
 config/gpgpu/local.toml
 docs/migration/CONFIGURATION.md
+/out/*
+!/out/.gitkeep

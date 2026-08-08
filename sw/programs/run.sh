@@ -60,7 +60,7 @@ Generic run options:
 
 Adapter-specific FPGA options:
   Put program-specific options after -- and they will be forwarded to fpga_run.py
-  and then to programs/<program>/fpga.py.
+  and then to sw/programs/<program>/fpga.py.
 
 Examples:
   $0 -p nbody riscv --fpga --port /dev/ttyUSB1 --kernel-calls 1000 --visualize -- --steps 1

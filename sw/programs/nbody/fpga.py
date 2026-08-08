@@ -1,6 +1,6 @@
 """FPGA execution adapter for the nbody program.
 
-This adapter targets the refactored programs/fpga_run.py API.
+This adapter targets the refactored sw/programs/fpga_run.py API.
 
 The runner is generic and only knows how to:
   - load IMEM

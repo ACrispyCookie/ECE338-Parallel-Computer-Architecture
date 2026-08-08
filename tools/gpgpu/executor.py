@@ -41,7 +41,7 @@ class Executor:
 
     def _run_sw_program_native(self) -> RunResult:
         program = str(self.config.get("program"))
-        command = ("make", "-C", "programs", f"PROG={program}", "x86")
+        command = ("make", "-C", "sw/programs", f"PROG={program}", "x86")
         completed = subprocess.run(
             command,
             cwd=self.repo_root,
@@ -49,7 +49,7 @@ class Executor:
             capture_output=True,
             check=False,
         )
-        produced = self.repo_root / "programs" / program / f"{program}_x86"
+        produced = self.repo_root / "sw" / "programs" / program / f"{program}_x86"
         produced_tuple: tuple[Path, ...] = (produced,) if produced.exists() and os.access(produced, os.X_OK) else ()
         return RunResult(
             goal_id="sw.program.native",

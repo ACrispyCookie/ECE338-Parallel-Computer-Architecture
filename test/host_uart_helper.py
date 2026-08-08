@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-BAREMETAL_DIR = Path(__file__).resolve().parents[1] / "host" / "baremetal"
+BAREMETAL_DIR = Path(__file__).resolve().parents[1] / "sw" / "host" / "baremetal"
 sys.path.insert(0, str(BAREMETAL_DIR))
 
 from gpgpu_uart import (
