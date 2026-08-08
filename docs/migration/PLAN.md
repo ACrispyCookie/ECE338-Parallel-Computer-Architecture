@@ -144,27 +144,13 @@ Evidence:
 - FPGA backend still includes hardware-load dependencies;
 - full planner test suite passes.
 
-## Current implementation scope
-
 ### Milestone 6: legacy workflow characterization
 
 Objective: add safe characterization tests for current legacy entry points before wrapping any real workflow in the new planner.
 
-Files expected to change:
+Implemented in commit `0de03ba` on branch `gpgpu-planner-foundation`.
 
-- `tests/legacy/test_legacy_cli_characterization.py`
-- `docs/migration/PLAN.md`
-- `docs/migration/COMPATIBILITY.md`
-
-Non-goals:
-
-- no legacy-script rename, move, rewrite, or deletion;
-- no `gpgpu run`;
-- no real Vivado, UART, compiler, RTL simulation, or demo execution;
-- no hardware access or serial-port opening;
-- no behavior fixes discovered during characterization.
-
-Expected evidence:
+Evidence:
 
 - root `./run.sh --help` is characterized;
 - `programs/run.sh --help` is compared with the root wrapper surface;
@@ -174,10 +160,49 @@ Expected evidence:
 - shared UART constants/helpers are recorded before adapter work;
 - duplicated UART/kernel-run logic findings are documented.
 
+## Current implementation scope
+
+### Milestone 7: first native compatibility adapter
+
+Objective: add the first narrow `gpgpu run` compatibility adapter for a non-hardware artifact goal while preserving legacy behavior.
+
+Files expected to change:
+
+- `tools/gpgpu/cli.py`
+- `tools/gpgpu/executor.py`
+- `tests/gpgpu/test_executor.py`
+- `docs/migration/PLAN.md`
+- `docs/migration/COMPATIBILITY.md`
+
+Scope:
+
+- support only `gpgpu run sw.program.native`;
+- delegate to `make -C programs PROG=<program> x86`;
+- verify the legacy executable at `programs/<program>/<program>_x86`;
+- unsupported goals fail clearly with no registered-adapter message.
+
+Non-goals:
+
+- no legacy-script rename, move, rewrite, or deletion;
+- no native program execution or `data.csv` generation;
+- no RISC-V compiler, UART, Vivado, RTL simulation, or demo execution;
+- no artifact relocation to `out/`;
+- no caching or artifact injection;
+- no broad executor framework beyond this one adapter.
+
+Expected evidence:
+
+- unsupported `run` goal fails clearly;
+- native adapter invokes the exact legacy Make command;
+- native adapter produces the ignored legacy executable path;
+- native adapter does not create `out/` artifacts;
+- native adapter does not run the program or create `data.csv`;
+- planner, legacy characterization, executor, and full discovery tests pass.
+
 ## Intended next milestones
 
-1. Complete Milestone 6 legacy workflow characterization.
-2. Add compatibility wrapper for one small non-hardware workflow.
+1. Complete Milestone 7 first native compatibility adapter.
+2. Decide whether the next wrapper should target `sw.program.elf`, `sw.program.image`, or a native run/check goal.
 3. Connect program/toolchain goals behind adapters only after characterization.
 4. Connect RTL test goals behind adapters only after characterization.
 5. Connect UART/board action goals behind explicit hardware-state policies.

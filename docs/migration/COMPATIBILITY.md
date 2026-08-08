@@ -40,6 +40,30 @@ Duplicated/shared UART and kernel-run observations before adapter work:
 
 Conclusion for future wrapper work: keep `host/baremetal/gpgpu_uart.py` as the protocol reference and treat `programs/fpga_run.py` plus `test/host_uart_tester.py` as behavior oracles. Do not extract or consolidate their loops until a wrapper/adaptor milestone compares command behavior against these characterization tests.
 
+## Milestone 7 native compatibility adapter
+
+The first executable goal adapter is intentionally narrow:
+
+```bash
+tools/gpgpu/gpgpu run sw.program.native --set program=nbody
+```
+
+It delegates to the legacy native Makefile target instead of reimplementing compiler flags:
+
+```bash
+make -C programs PROG=nbody x86
+```
+
+Compatibility behavior:
+
+- produced artifact stays at the legacy path `programs/<program>/<program>_x86`;
+- no `out/` artifact is created;
+- the native program is not run, so no `programs/<program>/data.csv` is produced;
+- unsupported executable goals fail with `no executor adapter registered for <goal>`;
+- legacy scripts and `programs/Makefile` are not modified.
+
+Known limitation: planner identity includes `program.optimization`, but the legacy native Makefile target currently uses `NATIVE_CFLAGS = -O2` and does not consume planner config. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
+
 ## Legacy workflows requiring characterization
 
 ### Program build and native run

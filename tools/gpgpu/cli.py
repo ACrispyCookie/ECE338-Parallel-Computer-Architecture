@@ -5,6 +5,7 @@ import os
 import sys
 
 from .config import ConfigError, ConfigResolver
+from .executor import ExecuteError, Executor, format_run_result
 from .goals import GoalDefinition
 from .planner import Plan, PlanError, Planner
 
@@ -41,6 +42,11 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--profile", default=None)
         p.add_argument("--set", dest="set_values", action="append", default=[])
         p.add_argument("-v", "--verbose", action="store_true", help="Show full explanatory planner metadata")
+
+    run_parser = sub.add_parser("run", help="Run an executable goal through a compatibility adapter")
+    run_parser.add_argument("goal")
+    run_parser.add_argument("--profile", default=None)
+    run_parser.add_argument("--set", dest="set_values", action="append", default=[])
 
     return parser
 
@@ -127,9 +133,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(plan.format_explain(config, verbose=args.verbose))
             return 0
 
+        if args.command == "run":
+            result = Executor(config).run(args.goal)
+            print(format_run_result(result))
+            return result.returncode
+
         parser.error(f"Unknown command: {args.command}")
         return 2
 
-    except (ConfigError, PlanError) as exc:
+    except (ConfigError, PlanError, ExecuteError) as exc:
         print(f"gpgpu: error: {exc}", file=sys.stderr)
         return 2
