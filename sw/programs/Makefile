@@ -29,6 +29,7 @@ NATIVE_SRC = $(SRC)
 # RISC-V Outputs
 # ==========================================
 ELF      = $(OUT_DIR)/$(PROG).elf
+ELF_IN   ?= $(ELF)
 MAP      = $(OUT_DIR)/$(PROG).map
 
 # Full dump:
@@ -73,7 +74,7 @@ $(NATIVE_EXE): $(NATIVE_SRC)
 # ------------------------------------------
 # Full assembly dump
 # ------------------------------------------
-$(DUMP_ASM): $(ELF)
+$(DUMP_ASM): $(ELF_IN)
 	@mkdir -p $(dir $@)
 	@echo "Generating full assembly dump..."
 	@$(OBJDUMP) -d -M no-aliases,numeric $< > $@

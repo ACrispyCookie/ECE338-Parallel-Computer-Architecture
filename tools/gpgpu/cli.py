@@ -5,7 +5,7 @@ import os
 import sys
 
 from .config import ConfigError, ConfigResolver
-from .executor import ExecuteError, Executor, format_run_result
+from .executor import ExecuteError, Executor, format_run_summary
 from .goals import GoalDefinition
 from .planner import Plan, PlanError, Planner
 
@@ -134,9 +134,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run":
-            result = Executor(config).run(args.goal, artifact_identity=plan.root.identity)
-            print(format_run_result(result))
-            return result.returncode
+            summary = Executor(config).run_plan(plan)
+            print(format_run_summary(summary, color=color))
+            return summary.returncode
 
         parser.error(f"Unknown command: {args.command}")
         return 2

@@ -280,13 +280,15 @@ Evidence:
 - unsupported goals still fail clearly;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current implementation scope
+## Completed artifact-layout milestone
 
 ### Milestone 12: route software artifacts to `out/`
 
 Objective: move software artifact outputs for the current program adapters out of `sw/programs/<program>/` and into identity-scoped directories under `out/`.
 
-Scope:
+Implemented in commits `c2c01cf` and `ade33ee` on branch `gpgpu-planner-foundation`.
+
+Added/changed:
 
 - use planner root artifact identity for `gpgpu run` output directories;
 - have `tools/gpgpu/executor.py` compute the artifact directory and pass it to adapters through `ExecutionContext`;
@@ -295,16 +297,7 @@ Scope:
 - preserve current compiler/linker/objdump/awk behavior and generated filenames;
 - leave `gpgpu clean` for a later milestone.
 
-Non-goals:
-
-- no graph executor yet;
-- no dependency execution beyond what Makefile performs internally;
-- no cache implementation;
-- no `gpgpu clean` subcommand implementation yet;
-- no Makefile replacement with Python-native build commands;
-- no hardware, UART, Vivado, demo, or RTL execution.
-
-Expected evidence:
+Evidence:
 
 - native, ELF, and image artifacts appear under `out/artifacts/<goal-id>/<program>/<identity>/`;
 - no source-tree software generated artifacts are left behind by `gpgpu run`;
@@ -313,13 +306,47 @@ Expected evidence:
 - tracked generated snapshots such as `sw/programs/nbody/nbody_program.asm` stay clean;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current dependency execution limitation
+## Current implementation scope
 
-Dependencies are currently declared in `tools/gpgpu/planner.py`, especially in `Planner._dependency_goal_ids()`. The planner builds and displays dependency graphs for `list`, `plan`, and `explain`.
+### Milestone 13: dependency-aware `gpgpu run`
 
-However, `gpgpu run <goal>` does not yet execute the planned dependency graph. It executes only the adapter registered for the requested root goal. For example, `gpgpu run sw.program.image` currently invokes the `sw.program.image` adapter only. Any lower-level file prerequisites are handled by Makefile's internal dependency rules, not by goal execution.
+Objective: make `gpgpu run <goal>` execute the planned graph in topological order instead of invoking only the root adapter.
 
-This is an intentional temporary limitation of the compatibility-adapter milestones, but it must be fixed before hardware/action/service workflows. The next executor milestone should introduce graph execution: walk `plan.nodes` in dependency order, run each registered adapter once per goal instance, pass dependency artifacts explicitly where needed, and distinguish artifact/action/service/check behavior.
+Scope:
+
+- add `Executor.run_plan(plan)`;
+- preflight the plan before running so missing public/action/service/check adapters fail before side effects;
+- visibly skip internal planner-only artifact nodes that have no adapter;
+- execute registered adapters in `plan.nodes` order;
+- stop on the first nonzero adapter return code;
+- show readable run progress, completed goals, skipped goals, failed goal stdout/stderr, and summary counts;
+- pass produced dependency artifacts into dependent adapter contexts;
+- make `sw.program.image` consume the `sw.program.elf` artifact through `ELF_IN` instead of rebuilding ELF in the image artifact directory.
+
+Non-goals:
+
+- no cache hit/miss skipping;
+- no `gpgpu clean` subcommand implementation yet;
+- no `--force`;
+- no artifact injection;
+- no parallel execution;
+- no hardware, UART, Vivado, demo, or RTL execution.
+
+Expected evidence:
+
+- `gpgpu run sw.program.image` runs `sw.program.elf` before `sw.program.image`;
+- `sw.program.compile_riscv` is visibly skipped as an internal planner-only artifact;
+- `sw.program.image` command includes `ELF_IN=<sw.program.elf artifact>`;
+- image artifact directory contains memory/dump outputs, not duplicate ELF/map outputs;
+- failing dependency stops dependent execution and prints stdout/stderr;
+- missing required root/check/action/service adapter fails before dependencies run;
+- planner, executor, legacy characterization, and full discovery tests pass.
+
+## Dependency execution policy
+
+Dependencies are declared in `tools/gpgpu/planner.py`, especially in `Planner._dependency_goal_ids()`. The planner builds and displays dependency graphs for `list`, `plan`, `explain`, and now `run`.
+
+`gpgpu run <goal>` executes registered adapters in the plan's topological order. Internal artifact nodes without adapters may be skipped only when they are planner-only implementation detail placeholders. Public goals, check goals, action goals, and service goals without adapters fail during preflight before any dependency adapter runs.
 
 ## Makefile backend and future Python backend direction
 
@@ -425,9 +452,9 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Complete Milestone 12 software artifact routing to `out/`.
-2. Introduce graph execution for `gpgpu run` so planned dependencies run as goal instances instead of relying only on Makefile prerequisites.
-3. Add an explicit `gpgpu clean` design/implementation milestone after graph execution and artifact ownership are defined.
+1. Complete Milestone 13 dependency-aware `gpgpu run`.
+2. Add an explicit `gpgpu clean` design/implementation milestone after graph execution and artifact ownership are defined.
+3. Revisit planner-only internal goals such as `sw.program.compile_riscv` and decide whether to remove, merge, or implement them.
 4. Consider `test.program` as a check goal for native-vs-image comparison.
 5. Connect RTL test goals behind adapters only after characterization.
 6. Connect UART/board action goals behind explicit hardware-state policies.

@@ -166,7 +166,13 @@ Compatibility behavior:
 - no broad `make clean` is introduced;
 - no `gpgpu clean` command is implemented yet.
 
-Current dependency limitation: dependencies are declared in the planner, but `gpgpu run` still executes only the root adapter. Makefile may build file prerequisites internally, but goal dependencies such as `sw.program.elf -> sw.program.image` are not executed as separate goal instances yet. This must be addressed by a later graph-executor milestone.
+Milestone 13 dependency-aware `gpgpu run` resolves that limitation for registered adapters:
+
+- `gpgpu run` now executes registered goal adapters in planner topological order;
+- internal planner-only artifacts such as `sw.program.compile_riscv` are shown as skipped when they have no adapter;
+- public/check/action/service goals without adapters fail during preflight before side effects;
+- failures stop dependent goals and show the failed goal stdout/stderr;
+- `sw.program.image` consumes the `sw.program.elf` output via `ELF_IN=<elf artifact>` instead of rebuilding ELF in the image artifact directory.
 
 ## Milestone 8 layout split
 

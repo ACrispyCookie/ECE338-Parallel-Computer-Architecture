@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from tools.gpgpu.cli import main
 from tools.gpgpu.config import ConfigResolver
+from tools.gpgpu.executor import Executor, RunResult, format_run_summary
 from tools.gpgpu.planner import Planner
 
 
@@ -38,6 +39,122 @@ class ExecutorStructureTests(unittest.TestCase):
         self.assertNotIn('"out"', adapter_source)
         self.assertNotIn('"artifacts"', adapter_source)
         self.assertNotIn("_artifact_dir", adapter_source)
+
+
+class GraphRunTests(unittest.TestCase):
+    program = "nbody"
+
+    def config(self):
+        return ConfigResolver().resolve(set_values=[f"program={self.program}"])
+
+    def test_run_plan_executes_registered_dependencies_before_root(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.image")
+        calls: list[str] = []
+
+        def record(name: str):
+            def adapter(context):
+                calls.append(context.goal_id)
+                return RunResult(
+                    goal_id=context.goal_id,
+                    command=("fake", name),
+                    returncode=0,
+                    produced=(context.artifact_dir / f"{name}.artifact",),
+                )
+            return adapter
+
+        summary = Executor(
+            config,
+            adapters={
+                "sw.program.elf": record("elf"),
+                "sw.program.image": record("image"),
+            },
+        ).run_plan(plan)
+
+        self.assertEqual(calls, ["sw.program.elf", "sw.program.image"])
+        self.assertEqual(summary.returncode, 0)
+        rendered = format_run_summary(summary, repo_root=ROOT)
+        self.assertIn("Run: sw.program.image", rendered)
+        self.assertIn("Plan: 2 executable goals, 3 planned goals", rendered)
+        self.assertIn("SKIPPED", rendered)
+        self.assertIn("sw.program.compile_riscv", rendered)
+        self.assertLess(rendered.index("RUNNING   sw.program.elf"), rendered.index("RUNNING   sw.program.image"))
+        self.assertIn("DONE      sw.program.elf", rendered)
+        self.assertIn("DONE      sw.program.image", rendered)
+        self.assertIn("completed: 2", rendered)
+        self.assertIn("skipped:   1", rendered)
+        self.assertIn("failed:    0", rendered)
+
+    def test_run_summary_supports_colorized_status_output(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.native")
+
+        def native(context):
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+
+        summary = Executor(config, adapters={"sw.program.native": native}).run_plan(plan)
+        rendered = format_run_summary(summary, repo_root=ROOT, color=True)
+
+        self.assertIn("\033[", rendered)
+        self.assertIn("RUNNING", rendered)
+        self.assertIn("DONE", rendered)
+
+    def test_run_plan_stops_after_failed_dependency_and_prints_output(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.image")
+        calls: list[str] = []
+
+        def failing_elf(context):
+            calls.append(context.goal_id)
+            return RunResult(
+                goal_id=context.goal_id,
+                command=("fake", "elf"),
+                returncode=7,
+                produced=(),
+                stdout="compile stdout",
+                stderr="compile stderr",
+            )
+
+        def image(context):
+            calls.append(context.goal_id)
+            return RunResult(goal_id=context.goal_id, command=("fake", "image"), returncode=0, produced=())
+
+        summary = Executor(
+            config,
+            adapters={"sw.program.elf": failing_elf, "sw.program.image": image},
+        ).run_plan(plan)
+
+        self.assertEqual(calls, ["sw.program.elf"])
+        self.assertEqual(summary.returncode, 7)
+        rendered = format_run_summary(summary, repo_root=ROOT)
+        self.assertIn("FAILED    sw.program.elf", rendered)
+        self.assertIn("stdout:", rendered)
+        self.assertIn("compile stdout", rendered)
+        self.assertIn("stderr:", rendered)
+        self.assertIn("compile stderr", rendered)
+        self.assertIn("STOPPED   sw.program.image", rendered)
+        self.assertIn("dependency sw.program.elf failed", rendered)
+
+    def test_missing_required_public_adapter_fails_before_dependencies_run(self):
+        config = self.config()
+        plan = Planner(config).plan("test.program")
+        calls: list[str] = []
+
+        def native(context):
+            calls.append(context.goal_id)
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+
+        with self.assertRaisesRegex(Exception, "no executor adapter registered for required goal test.program"):
+            Executor(
+                config,
+                adapters={
+                    "sw.program.native": native,
+                    "sw.program.elf": native,
+                    "sw.program.image": native,
+                },
+            ).run_plan(plan)
+
+        self.assertEqual(calls, [])
 
 
 class ProgramAdapterTests(unittest.TestCase):
@@ -92,7 +209,7 @@ class ProgramAdapterTests(unittest.TestCase):
             code = main(["--color", "never", "run", "hw.board.bitstream"])
         self.assertEqual(code, 2)
         self.assertEqual(stdout.getvalue(), "")
-        self.assertIn("no executor adapter registered for hw.board.bitstream", stderr.getvalue())
+        self.assertIn("no executor adapter registered for required goal hw.board.bitstream", stderr.getvalue())
 
     def test_unimplemented_program_check_still_fails_clearly(self):
         stdout = io.StringIO()
@@ -101,7 +218,7 @@ class ProgramAdapterTests(unittest.TestCase):
             code = main(["--color", "never", "run", "test.program", "--set", f"program={self.program}"])
         self.assertEqual(code, 2)
         self.assertEqual(stdout.getvalue(), "")
-        self.assertIn("no executor adapter registered for test.program", stderr.getvalue())
+        self.assertIn("no executor adapter registered for required goal test.program", stderr.getvalue())
 
     def test_native_adapter_builds_artifact_under_out(self):
         self.require_native_tools()
@@ -118,7 +235,7 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertIn("Run: sw.program.native", rendered)
         self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
         self.assertIn(" native", rendered)
-        self.assertIn("Produced:", rendered)
+        self.assertIn("produced:", rendered)
         self.assertIn(f"out/artifacts/sw.program.native/nbody/{out_dir.name}/nbody_x86", rendered)
         self.assertTrue(out_native.exists())
         self.assertTrue(os.access(out_native, os.X_OK))
@@ -162,6 +279,7 @@ class ProgramAdapterTests(unittest.TestCase):
 
     def test_image_adapter_builds_artifacts_under_out(self):
         self.require_riscv_tools()
+        elf_dir = self.artifact_dir("sw.program.elf")
         out_dir = self.artifact_dir("sw.program.image")
         out_mem = out_dir / f"{self.program}_instructions.mem"
         out_dump = out_dir / f"{self.program}_dump_real.asm"
@@ -177,13 +295,15 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("Run: sw.program.image", rendered)
         self.assertIn("make -C sw/programs PROG=nbody OUT_DIR=", rendered)
+        self.assertIn("ELF_IN=", rendered)
+        self.assertIn(f"out/artifacts/sw.program.elf/nbody/{elf_dir.name}/nbody.elf", rendered)
         self.assertIn(" image", rendered)
         self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}/nbody_instructions.mem", rendered)
         self.assertIn(f"out/artifacts/sw.program.image/nbody/{out_dir.name}/nbody_dump_real.asm", rendered)
         self.assertTrue(out_mem.exists())
         self.assertTrue(out_dump.exists())
-        self.assertTrue(out_elf.exists())
-        self.assertTrue(out_map.exists())
+        self.assertFalse(out_elf.exists())
+        self.assertFalse(out_map.exists())
         self.assertFalse(self.elf.exists())
         self.assertFalse(self.map_file.exists())
         self.assertFalse(self.dump_asm.exists())

@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from tools.gpgpu.executor import ExecutionContext, RunResult
+from tools.gpgpu.executor import ExecuteError, ExecutionContext, RunResult
 
 
 def run_native(context: ExecutionContext) -> RunResult:
@@ -36,7 +36,8 @@ def run_elf(context: ExecutionContext) -> RunResult:
 
 def run_image(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    command = _make_command(program, context.artifact_dir, "image")
+    elf_path = _dependency_artifact(context, "sw.program.elf", suffix=".elf")
+    command = _make_command(program, context.artifact_dir, "image", extra=(f"ELF_IN={elf_path}",))
     return _run_make_artifacts(
         goal_id=context.goal_id,
         command=command,
@@ -44,15 +45,20 @@ def run_image(context: ExecutionContext) -> RunResult:
         produced=(
             context.artifact_dir / f"{program}_instructions.mem",
             context.artifact_dir / f"{program}_dump_real.asm",
-            context.artifact_dir / f"{program}.elf",
-            context.artifact_dir / f"{program}.map",
         ),
         require_executable=False,
     )
 
 
-def _make_command(program: str, out_dir: Path, target: str) -> tuple[str, ...]:
-    return ("make", "-C", "sw/programs", f"PROG={program}", f"OUT_DIR={out_dir}", target)
+def _make_command(program: str, out_dir: Path, target: str, *, extra: tuple[str, ...] = ()) -> tuple[str, ...]:
+    return ("make", "-C", "sw/programs", f"PROG={program}", f"OUT_DIR={out_dir}", *extra, target)
+
+
+def _dependency_artifact(context: ExecutionContext, goal_id: str, *, suffix: str) -> Path:
+    for path in context.dependency_artifacts.get(goal_id, ()):
+        if path.name.endswith(suffix):
+            return path
+    raise ExecuteError(f"{context.goal_id} requires {goal_id} artifact matching *{suffix}")
 
 
 def _run_make_artifacts(
