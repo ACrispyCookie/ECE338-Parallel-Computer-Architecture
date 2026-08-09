@@ -3,6 +3,7 @@
 ITERS=100
 MODE="standard"
 VISUALIZE=false
+PIPELINE_TIMING_DIAGRAM=false
 TB_MODE="e2e"
 TB_FILE="tb_GPGPU_e2e.v"
 RANGE_START=""
@@ -30,6 +31,7 @@ print_help() {
     echo "       --range A-B         Run tests A through B inclusive"
     echo "  -c,  --clean             Clean generated files"
     echo "  -v,  --visualize         Open GTKWave after simulation"
+    echo "       --timing-diagram       Open the interactive pipeline timing diagram"
     echo ""
     echo "Testbench selection:"
     echo "       --tb smx            Use tb_GPGPU.v"
@@ -43,6 +45,7 @@ print_help() {
     echo "Examples:"
     echo "  ./run_tests.sh --standard --tb e2e"
     echo "  ./run_tests.sh --standard --tb smx --range 14"
+    echo "  ./run_tests.sh --standard --tb smx --range 14 --timing-diagram"
     echo "  ./run_tests.sh --standard --tb smx --range 10-14"
     echo "  ./run_tests.sh --host --port /dev/ttyUSB1"
     echo "  ./run_tests.sh --gen-only"
@@ -112,6 +115,10 @@ while [[ "$#" -gt 0 ]]; do
             VISUALIZE=true
             ;;
 
+        --timing-diagram)
+            PIPELINE_TIMING_DIAGRAM=true
+            ;;
+
         --tb)
             TB_MODE="$2"
             shift
@@ -161,6 +168,11 @@ if [[ "$MODE" != "host" && "$MODE" != "gen-only" ]]; then
     fi
 fi
 
+if [ "$PIPELINE_TIMING_DIAGRAM" = true ] && [ "$TB_FILE" != "tb_GPGPU.v" ]; then
+    echo "[ERROR] --timing-diagram requires --tb smx because only tb_GPGPU.v writes trace.csv."
+    exit 1
+fi
+
 echo "=================================================================="
 echo " Configuration"
 echo "=================================================================="
@@ -174,7 +186,8 @@ fi
 echo " UART Port:  $UART_PORT"
 echo " UART Baud:  $UART_BAUD"
 echo " Iterations: $ITERS"
-echo " Visualize:  $VISUALIZE"
+echo " Waveforms:  $VISUALIZE"
+echo " Pipeline:   $PIPELINE_TIMING_DIAGRAM"
 echo "=================================================================="
 
 case "$MODE" in
@@ -245,6 +258,29 @@ case "$MODE" in
         if [ "$TESTSUITE_FAILED" = true ]; then
             echo -e "\n[ERROR] Standard testsuite failed! Halting pipeline."
             exit 1
+        fi
+
+        if [ "$PIPELINE_TIMING_DIAGRAM" = true ]; then
+            echo -e "\n[Optional] Opening pipeline timing diagram..."
+            diagram_args=(--port 0)
+            if [[ -n "$RANGE_END" ]]; then
+                diagram_args+=(--test "$RANGE_END")
+            fi
+            diagram_log="${TMPDIR:-/tmp}/gpgpu-pipeline-timing-diagram.log"
+            python3 pipeline_timing_diagram.py "${diagram_args[@]}" >"$diagram_log" 2>&1 &
+            diagram_pid=$!
+            sleep 0.4
+            if kill -0 "$diagram_pid" 2>/dev/null; then
+                diagram_url=$(grep -m1 '^Pipeline timing diagram:' "$diagram_log" | cut -d' ' -f3-)
+                echo "  -> Pipeline timing diagram launched (PID $diagram_pid): $diagram_url"
+                echo "  -> Available tests are discovered dynamically; refresh inside the diagram after new runs."
+                echo "  -> Server details: $diagram_log"
+            else
+                wait "$diagram_pid" || true
+                echo "[ERROR] Could not start the pipeline timing diagram:"
+                cat "$diagram_log"
+                exit 1
+            fi
         fi
 
         if [ "$MODE" == "rand" ]; then

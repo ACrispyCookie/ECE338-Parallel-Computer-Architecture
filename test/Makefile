@@ -56,9 +56,8 @@ host: gen
 # UTILITY TARGETS
 # ==============================================================================
 
-visualize:
-	open http://0.0.0.0:8000/visualizer.html
-	python3 -m http.server
+pipeline-timing-diagram:
+	python3 pipeline_timing_diagram.py
 
 clean:
 	rm -f ./tests/test*/program.mem

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPGPU Pipeline Timing Diagram</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#131a2c;--line:#2a3550;--text:#e5e9f0;--muted:#8f9bb3;--if:#e0af68;--id:#7dcfff;--ex:#f7768e;--mem:#bb9af7;--wb:#9ece6a;--accent:#7aa2f7}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#090d18,#11182a);color:var(--text);font:14px system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:rgba(11,16,32,.96);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:14px 20px}
+h1{font-size:20px;margin:0 0 10px}.controls{display:flex;flex-wrap:wrap;gap:9px;align-items:end}.control{display:grid;gap:4px}label{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.08em}
+select,input,button{border:1px solid var(--line);background:#0e1526;color:var(--text);border-radius:7px;padding:7px 9px}button{cursor:pointer}button:hover{border-color:var(--accent)}
+main{padding:16px 20px}.status{color:var(--muted);margin-bottom:10px}.error{color:#ff8f9c}.legend{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}.legend-label{color:var(--muted);font-size:11px;margin-right:3px}
+.matrix-wrap{max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+table{border-collapse:separate;border-spacing:0;min-width:100%;width:max-content}th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+thead th{position:sticky;top:0;z-index:3;background:#10182a;height:38px;min-width:58px;text-align:center;color:var(--muted);font:11px ui-monospace,monospace}
+.instruction-head{left:0;z-index:4!important;min-width:360px!important;text-align:left!important;padding-left:12px!important}
+.instruction{position:sticky;left:0;z-index:2;background:#10182a;min-width:360px;max-width:360px;padding:7px 10px;font:12px ui-monospace,monospace}.instruction .pc{display:inline-block;width:82px;color:var(--muted);font-size:10px}.instruction .asm{white-space:normal;overflow-wrap:anywhere}
+.stage-cell{width:58px;min-width:58px;height:42px;padding:3px;text-align:center;background:#11182a}.stage-stack{display:flex;flex-direction:column;gap:2px;align-items:stretch}
+.stage{display:block;border:1px solid currentColor;border-radius:4px;padding:3px 2px;font:bold 10px ui-monospace,monospace;line-height:1;background:rgba(255,255,255,.04);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.stage.IF{color:var(--if);background:rgba(224,175,104,.12)}.stage.ID{color:var(--id);background:rgba(125,207,255,.12)}.stage.EX{color:var(--ex);background:rgba(247,118,142,.12)}.stage.MEM{color:var(--mem);background:rgba(187,154,247,.12)}.stage.WB{color:var(--wb);background:rgba(158,206,106,.12)}
+.stage.held{box-shadow:inset 0 -2px currentColor}.empty-row .instruction{color:#65718a}.empty{padding:40px;text-align:center;color:var(--muted)}
+.summary{font-size:11px;color:var(--muted);margin-left:auto}.matrix-wrap::-webkit-scrollbar{height:12px;width:12px}.matrix-wrap::-webkit-scrollbar-thumb{background:#34405c;border-radius:8px}
+@media(max-width:700px){header,main{padding-left:10px;padding-right:10px}.instruction-head,.instruction{min-width:260px!important;max-width:260px}}
+</style>
+</head>
+<body>
+<header><h1>GPGPU Pipeline Timing Diagram</h1><div class="controls">
+<div class="control"><label for="test">Generated test</label><select id="test"></select></div>
+<div class="control"><label for="start">First cycle</label><input id="start" type="number" min="1" value="1"></div>
+<div class="control"><label for="end">Last cycle</label><input id="end" type="number" min="1"></div>
+<button id="apply">Apply range</button><button id="refresh">Refresh tests</button><span id="summary" class="summary"></span>
+</div></header>
+<main><div id="status" class="status">Loading generated traces…</div>
+<div class="legend"><span class="legend-label">Pipeline stages:</span><span class="stage IF">IF</span><span class="stage ID">ID</span><span class="stage EX">EX</span><span class="stage MEM">MEM</span><span class="stage WB">WB</span></div>
+<div id="matrix" class="matrix-wrap"><div class="empty">Select a generated test.</div></div></main>
+<script>
+const stageOrder=['IF','ID','EX','MEM','WB'];let payload=null;
+const el=id=>document.getElementById(id);const status=(text,error=false)=>{el('status').textContent=text;el('status').className=error?'status error':'status'};
+async function json(url){const response=await fetch(url,{cache:'no-store'});const body=await response.json();if(!response.ok)throw new Error(body.error||response.statusText);return body}
+async function refreshTests(){try{const data=await json('/api/tests'),select=el('test');const queryTest=Number(new URLSearchParams(location.search).get('test'));const wanted=queryTest||data.selected||Number(select.value);select.innerHTML='';for(const test of data.tests){const option=document.createElement('option');option.value=test.id;option.textContent=test.name;select.appendChild(option)}if(!data.tests.length){status('No generated trace.csv files found. Run an SMX test first.',true);payload=null;render();return}const ids=data.tests.map(test=>test.id);select.value=ids.includes(wanted)?wanted:ids.at(-1);await loadTest(select.value)}catch(error){status(error.message,true)}}
+async function loadTest(id){try{status(`Loading test ${id}…`);payload=await json(`/api/tests/${id}`);history.replaceState(null,'',`?test=${id}`);el('start').value=payload.cycles[0]?.cycle||1;el('end').value=payload.cycles.at(-1)?.cycle||1;render();status(`Test ${id}: instructions on Y, cycles on X`)}catch(error){status(error.message,true)}}
+function render(){const root=el('matrix');root.innerHTML='';if(!payload){root.innerHTML='<div class="empty">No trace loaded.</div>';return}
+ const minimum=payload.cycles[0]?.cycle||1,maximum=payload.cycles.at(-1)?.cycle||minimum;let first=Math.max(minimum,Number(el('start').value)||minimum),last=Math.min(maximum,Number(el('end').value)||maximum);if(last<first)[first,last]=[last,first];el('start').value=first;el('end').value=last;
+ const cycles=[];for(let cycle=first;cycle<=last;cycle++)cycles.push(cycle);const table=document.createElement('table'),thead=document.createElement('thead'),header=document.createElement('tr');const instructionHead=document.createElement('th');instructionHead.className='instruction-head';instructionHead.textContent='Instruction (Y) / Clock cycle (X) →';header.appendChild(instructionHead);for(const cycle of cycles){const th=document.createElement('th');th.textContent=cycle;header.appendChild(th)}thead.appendChild(header);table.appendChild(thead);const tbody=document.createElement('tbody');
+ for(const row of payload.timing){const tr=document.createElement('tr'),label=document.createElement('td');label.className='instruction';label.innerHTML=`<span class="pc">0x${row.pc}</span><span class="asm"></span>`;label.querySelector('.asm').textContent=row.instruction;tr.appendChild(label);let occupied=false;
+  for(const cycle of cycles){const td=document.createElement('td');td.className='stage-cell';const stages=row.cells[String(cycle)]||row.cells[cycle]||[];if(stages.length){occupied=true;const stack=document.createElement('div');stack.className='stage-stack';for(const stageName of stageOrder.filter(name=>stages.includes(name))){const box=document.createElement('span');box.className=`stage ${stageName}`;box.textContent=stageName;const previous=row.cells[String(cycle-1)]||row.cells[cycle-1]||[];if(previous.includes(stageName)){box.classList.add('held');box.title=`${stageName} held from cycle ${cycle-1}`}stack.appendChild(box)}td.appendChild(stack)}tr.appendChild(td)}if(!occupied)tr.classList.add('empty-row');tbody.appendChild(tr)}table.appendChild(tbody);root.appendChild(table);el('summary').textContent=`${payload.program.length} instructions × ${cycles.length} cycles`;
+}
+el('test').addEventListener('change',event=>loadTest(event.target.value));el('refresh').addEventListener('click',refreshTests);el('apply').addEventListener('click',render);refreshTests();
+</script>
+</body></html>
