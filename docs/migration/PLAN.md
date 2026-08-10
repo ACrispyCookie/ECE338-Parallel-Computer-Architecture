@@ -361,7 +361,7 @@ Evidence:
 - existing adapter artifact tests pass with the compact run output;
 - planner, executor, legacy characterization, and full discovery tests pass.
 
-## Current implementation scope
+## Completed artifact-layout milestone
 
 ### Milestone 16: generic artifact layout and `gpgpu clean`
 
@@ -399,6 +399,39 @@ Expected evidence:
 - `--deps` includes artifact dependencies in plan order;
 - non-artifact root-only clean fails clearly;
 - safety tests reject broad, outside, and symlink paths;
+- planner, executor, cleaner, legacy characterization, and full discovery tests pass.
+
+## Completed cache-status milestone
+
+### Milestone 17: planning-only cache status
+
+Objective: report cache presence in `gpgpu plan` and `gpgpu explain` using the generic artifact layout and `artifact.toml` metadata without changing execution behavior.
+
+Scope:
+
+- artifact goals show compact `CACHE HIT` or `CACHE MISS` status in plan output;
+- status is computed from `out/artifacts/<goal>/<identity>/artifact.toml`;
+- matching goal and identity metadata is treated as a hit;
+- missing artifact directory, missing metadata, invalid metadata, or mismatched goal/identity is treated as a miss;
+- verbose plan/explain output reports cache state, path, and reason;
+- action, service, and check goals do not show compact cache status;
+- `gpgpu run` still executes adapters even when plan reports a hit.
+
+Non-goals:
+
+- no cache skipping;
+- no source-hash or tool-version validation;
+- no full artifact specs;
+- no artifact injection;
+- no hardware/service/action cleanup behavior;
+- no broad artifact garbage collection.
+
+Expected evidence:
+
+- clean artifacts then `gpgpu plan sw.program.image --set program=nbody` reports misses;
+- after `gpgpu run sw.program.image --set program=nbody`, plan reports hits for the built artifacts;
+- after `gpgpu clean sw.program.image --deps --set program=nbody`, plan reports misses again;
+- tests cover missing metadata, matching metadata, metadata mismatch, non-artifact compact output, and run-not-skipped behavior;
 - planner, executor, cleaner, legacy characterization, and full discovery tests pass.
 
 ## Dependency execution policy
@@ -475,7 +508,7 @@ tools/gpgpu/adapters/
 
 Domain adapter modules own command construction and artifact verification for their area. Shared subprocess helpers may move to a common module when more than one adapter family needs them.
 
-Long-term direction: executor should walk a validated planned graph in dependency order, cache-skip only compatible artifact goals, never cache-skip action goals, and manage service lifecycles explicitly.
+Long-term direction: executor should walk a validated planned graph in dependency order, cache-skip only compatible artifact goals after a dedicated cache-execution milestone, never cache-skip action goals, and manage service lifecycles explicitly.
 
 ## Future `config.py` direction
 
@@ -511,13 +544,12 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Complete Milestone 15 declarative dependency metadata.
-2. Add an explicit `gpgpu clean` design/implementation milestone now that graph execution, artifact ownership, and dependency declarations are defined.
-3. Consider metadata-only artifact declarations as a focused follow-up before or during `clean`.
-4. Consider `test.program` as a check goal for native-vs-image comparison.
-5. Connect RTL test goals behind adapters only after characterization.
-6. Connect UART/board action goals behind explicit hardware-state policies.
-7. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
+1. Consider cache validation inputs, such as source hashes and relevant tool versions, before execution skipping.
+2. Consider cache-aware `gpgpu run` only after validation semantics are explicit.
+3. Consider `test.program` as a check goal for native-vs-image comparison.
+4. Connect RTL test goals behind adapters only after characterization.
+5. Connect UART/board action goals behind explicit hardware-state policies.
+6. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
 
 ## Rollback
 

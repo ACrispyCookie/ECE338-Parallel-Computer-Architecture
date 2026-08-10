@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
+from .artifacts import ArtifactStatus, read_artifact_status
 from .config import ResolvedConfig
 from .goals import GOALS, GoalDefinition
 
@@ -32,6 +34,7 @@ class GoalInstance:
     dependencies: tuple[str, ...] = ()
     expected_outputs: tuple[str, ...] = ()
     side_effects: tuple[str, ...] = ()
+    cache_status: ArtifactStatus | None = None
 
     @property
     def key(self) -> str:
@@ -67,9 +70,12 @@ class Plan:
                 "service": "◆",
                 "check": "✓",
             }[node.kind]
-            cache = " cacheable" if node.cacheable else ""
+            cache = _format_cache_column(node)
             params = format_params(node.params, verbose=verbose)
-            lines.append(f"{label:<8} {marker} {index:02d}. {node.goal_id:<24} {params}{cache}".rstrip())
+            if cache:
+                lines.append(f"{label:<8} {cache:<10} {marker} {index:02d}. {node.goal_id:<24} {params}".rstrip())
+            else:
+                lines.append(f"{label:<8} {marker} {index:02d}. {node.goal_id:<24} {params}".rstrip())
             if verbose:
                 lines.extend(_format_node_metadata(node))
         if verbose and self.notes:
@@ -95,8 +101,19 @@ class Plan:
         return "\n".join(lines)
 
 
+def _format_cache_column(node: GoalInstance) -> str:
+    if node.kind != "artifact" or node.cache_status is None:
+        return ""
+    return "CACHE HIT" if node.cache_status.is_hit else "CACHE MISS"
+
+
 def _format_node_metadata(node: GoalInstance) -> list[str]:
     lines: list[str] = []
+    if node.cache_status is not None and node.kind == "artifact":
+        status = node.cache_status
+        lines.append(f"           ↳ cache       {status.state}")
+        lines.append(f"           ↳ cache path  {status.path}")
+        lines.append(f"           ↳ cache why   {status.reason}")
     if node.expected_outputs:
         lines.append(f"           ↳ outputs      {', '.join(node.expected_outputs)}")
     if node.side_effects:
@@ -121,8 +138,9 @@ def format_params(params: tuple[tuple[str, object], ...], *, verbose: bool = Fal
 
 
 class Planner:
-    def __init__(self, config: ResolvedConfig):
+    def __init__(self, config: ResolvedConfig, *, repo_root: str | Path | None = None):
         self.config = config
+        self.repo_root = Path(repo_root) if repo_root is not None else Path.cwd()
         self._instances: dict[str, GoalInstance] = {}
         self._notes: list[PlanNote] = []
 
@@ -166,6 +184,21 @@ class Planner:
             expected_outputs=definition.expected_outputs,
             side_effects=definition.side_effects,
         )
+        if definition.kind == "artifact":
+            instance = GoalInstance(
+                goal_id=instance.goal_id,
+                kind=instance.kind,
+                params=instance.params,
+                identity=instance.identity,
+                cacheable=instance.cacheable,
+                public=instance.public,
+                description=instance.description,
+                lifecycle=instance.lifecycle,
+                dependencies=instance.dependencies,
+                expected_outputs=instance.expected_outputs,
+                side_effects=instance.side_effects,
+                cache_status=read_artifact_status(self.repo_root, instance),
+            )
         self._instances[key] = instance
         return instance
 

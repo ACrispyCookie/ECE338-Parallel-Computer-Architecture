@@ -35,13 +35,14 @@ class LegacyCliCharacterizationTests(unittest.TestCase):
     def test_root_run_help_is_stable_and_non_interactive(self):
         result = self.run_cmd("./run.sh", "--help")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Optional build targets:", result.stdout)
-        self.assertIn("--fpga", result.stdout)
-        self.assertIn("--kernel-calls N", result.stdout)
-        self.assertIn("Adapter-specific FPGA options:", result.stdout)
+        self.assertIn("GPGPU goal planner foundation", result.stdout)
+        self.assertIn("list", result.stdout)
+        self.assertIn("plan", result.stdout)
+        self.assertIn("explain", result.stdout)
+        self.assertIn("run", result.stdout)
+        self.assertIn("clean", result.stdout)
 
-    def test_programs_run_help_matches_root_entry_point_surface(self):
-        root_help = self.run_cmd("./run.sh", "--help")
+    def test_programs_run_help_preserves_legacy_program_surface(self):
         programs_help = self.run_cmd("./sw/programs/run.sh", "--help")
         self.assertEqual(programs_help.returncode, 0, programs_help.stderr)
         for marker in (
@@ -51,7 +52,6 @@ class LegacyCliCharacterizationTests(unittest.TestCase):
             "--skip-load-imem",
             "Put program-specific options after --",
         ):
-            self.assertIn(marker, root_help.stdout)
             self.assertIn(marker, programs_help.stdout)
 
     def test_fpga_run_help_characterizes_common_uart_loop_options(self):

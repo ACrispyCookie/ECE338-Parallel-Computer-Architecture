@@ -98,6 +98,33 @@ class GraphRunTests(unittest.TestCase):
         self.assertIn("skipped:   0", rendered)
         self.assertIn("failed:    0", rendered)
 
+    def test_run_plan_still_executes_when_artifact_metadata_exists(self):
+        from tools.gpgpu.artifacts import artifact_dir
+
+        config = self.config()
+        initial = Planner(config, repo_root=ROOT).plan("sw.program.native")
+        out_dir = artifact_dir(ROOT, initial.root)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "artifact.toml").write_text(
+            f'goal = "sw.program.native"\nidentity = "{initial.root.identity}"\n',
+            encoding="utf-8",
+        )
+        calls: list[str] = []
+
+        def native(context):
+            calls.append(context.goal_id)
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+
+        try:
+            plan = Planner(config, repo_root=ROOT).plan("sw.program.native")
+            self.assertIn("CACHE HIT", plan.format_plan())
+            summary = Executor(config, adapters={"sw.program.native": native}).run_plan(plan)
+        finally:
+            shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.native", ignore_errors=True)
+
+        self.assertEqual(summary.returncode, 0)
+        self.assertEqual(calls, ["sw.program.native"])
+
     def test_run_summary_supports_colorized_status_output(self):
         config = self.config()
         plan = Planner(config).plan("sw.program.native")

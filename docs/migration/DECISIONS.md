@@ -169,3 +169,16 @@ Accepted Milestone 16 direction:
 - Broad paths such as `out/`, `out/artifacts/`, and `out/artifacts/<goal>` are refused.
 - Symlink artifact directories are refused initially.
 - Full artifact specs, cache validation, artifact injection, and garbage collection remain deferred.
+
+## Planning-only cache status
+
+Accepted Milestone 17 direction:
+
+- `gpgpu plan` may report `CACHE HIT` or `CACHE MISS` for artifact goals only.
+- Cache status is presence metadata, not execution policy.
+- A hit requires `out/artifacts/<goal>/<identity>/artifact.toml` to exist and contain matching `goal` and `identity` values.
+- Missing directories, missing metadata, invalid metadata, and goal/identity mismatches are misses.
+- Action, service, and check goals are not cache hits and should not show compact cache status.
+- Verbose plan/explain output reports cache state, path, and reason.
+- `gpgpu run` must continue executing adapters even when plan reports a cache hit until a later cache-execution milestone defines validation and skip semantics.
+- Source hashes, tool versions, generated config hashes, artifact specs, and artifact injection remain deferred.

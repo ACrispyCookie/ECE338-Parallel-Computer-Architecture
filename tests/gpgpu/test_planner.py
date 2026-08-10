@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -17,6 +18,31 @@ class PlannerFoundationTests(unittest.TestCase):
     def make_planner(self, *sets):
         config = ConfigResolver().resolve(profile=None, set_values=list(sets))
         return Planner(config)
+
+    def tearDown(self):
+        for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
+            shutil.rmtree(ROOT / "out" / "artifacts" / goal_id, ignore_errors=True)
+
+    def write_metadata(self, node, *, goal_id=None, identity=None):
+        from tools.gpgpu.artifacts import artifact_dir
+
+        directory = artifact_dir(ROOT, node)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "artifact.toml").write_text(
+            "\n".join(
+                [
+                    f'goal = "{goal_id or node.goal_id}"',
+                    f'kind = "{node.kind}"',
+                    f'identity = "{identity or node.identity}"',
+                    "cacheable = true",
+                    "public = true",
+                    f'description = "{node.description}"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return directory
 
     def test_runtime_options_do_not_change_native_program_identity(self):
         slow = self.make_planner("demo.fps=12", "demo=nbody-3d", "backend=fake")
@@ -178,6 +204,47 @@ class PlannerFoundationTests(unittest.TestCase):
         node = self.make_planner().plan("sw.program.image").root
         self.assertEqual(node.kind, "artifact")
         self.assertTrue(node.cacheable)
+
+    def test_plan_reports_cache_miss_when_artifact_metadata_is_missing(self):
+        config = ConfigResolver().resolve(set_values=["program=nbody"])
+        plan = Planner(config, repo_root=ROOT).plan("sw.program.image")
+
+        rendered = plan.format_plan()
+
+        self.assertIn("BUILD    CACHE MISS", rendered)
+        self.assertIn("sw.program.elf", rendered)
+        self.assertIn("sw.program.image", rendered)
+
+    def test_plan_reports_cache_hit_for_matching_artifact_metadata(self):
+        config = ConfigResolver().resolve(set_values=["program=nbody"])
+        initial = Planner(config, repo_root=ROOT).plan("sw.program.elf")
+        self.write_metadata(initial.root)
+
+        rendered = Planner(config, repo_root=ROOT).plan("sw.program.elf").format_plan()
+
+        self.assertIn("BUILD    CACHE HIT", rendered)
+        self.assertNotIn("CACHE MISS", rendered)
+
+    def test_verbose_plan_reports_cache_miss_reason_for_metadata_mismatch(self):
+        config = ConfigResolver().resolve(set_values=["program=nbody"])
+        initial = Planner(config, repo_root=ROOT).plan("sw.program.elf")
+        self.write_metadata(initial.root, identity="wrong-identity")
+
+        rendered = Planner(config, repo_root=ROOT).plan("sw.program.elf").format_plan(verbose=True)
+
+        self.assertIn("CACHE MISS", rendered)
+        self.assertIn("↳ cache       miss", rendered)
+        self.assertIn("artifact metadata mismatch", rendered)
+        self.assertIn("out/artifacts/sw.program.elf/", rendered)
+
+    def test_non_artifact_goals_do_not_show_compact_cache_status(self):
+        rendered = Planner(
+            ConfigResolver().resolve(set_values=["demo=nbody-3d", "backend=fake"]),
+            repo_root=ROOT,
+        ).plan("demo.run").format_plan()
+
+        service_line = next(line for line in rendered.splitlines() if "demo.run" in line and line.startswith("SERVICE"))
+        self.assertNotIn("CACHE", service_line)
 
     def test_action_goals_are_not_cacheable(self):
         node = self.make_planner().plan("hw.board.program").root

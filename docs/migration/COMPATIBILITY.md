@@ -231,6 +231,21 @@ Compatibility behavior:
 
 This layout change is expected to move existing generated software outputs if a user has stale artifacts from prior feature-branch milestones. Those stale directories can be removed manually because they are ignored output under `out/artifacts`.
 
+## Milestone 17 planning-only cache status
+
+Milestone 17 adds cache presence reporting to `gpgpu plan` and `gpgpu explain` without changing execution behavior.
+
+Compatibility behavior:
+
+- artifact goals report `CACHE HIT` only when their exact normalized `out/artifacts/<goal>/<identity>/artifact.toml` exists and records matching goal and identity metadata;
+- artifact goals report `CACHE MISS` for missing directories, missing metadata, invalid metadata, or goal/identity mismatches;
+- action, service, and check goals do not show compact cache status and are not considered cache hits;
+- verbose plan/explain output reports the status path and reason;
+- `gpgpu run` still executes adapters even when a plan reports `CACHE HIT`;
+- no source hashes, tool versions, artifact specs, artifact injection, or cache-skipping behavior is implemented yet.
+
+This milestone is intentionally a reporting milestone. It gives users visibility into current artifact presence while preserving the existing compatibility-adapter execution path.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:
