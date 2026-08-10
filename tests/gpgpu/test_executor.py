@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import os
 import shutil
@@ -105,8 +106,28 @@ class GraphRunTests(unittest.TestCase):
         initial = Planner(config, repo_root=ROOT).plan("sw.program.native")
         out_dir = artifact_dir(ROOT, initial.root)
         out_dir.mkdir(parents=True, exist_ok=True)
+        output = out_dir / "native.artifact"
+        output.write_text("native output\n", encoding="utf-8")
+        input_path = ROOT / "sw" / "programs" / self.program / "nbody.c"
+        output_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+        input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
         (out_dir / "artifact.toml").write_text(
-            f'goal = "sw.program.native"\nidentity = "{initial.root.identity}"\n',
+            "\n".join(
+                [
+                    'goal = "sw.program.native"',
+                    f'identity = "{initial.root.identity}"',
+                    "",
+                    "[produced]",
+                    'files = ["native.artifact"]',
+                    "",
+                    "[output_hashes]",
+                    f'"native.artifact" = "sha256:{output_hash}"',
+                    "",
+                    "[input_hashes]",
+                    f'"sw/programs/{self.program}/nbody.c" = "sha256:{input_hash}"',
+                    "",
+                ]
+            ),
             encoding="utf-8",
         )
         calls: list[str] = []
@@ -386,6 +407,9 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
         self.assertEqual(metadata["produced"]["files"], [f"{self.program}_x86"])
+        self.assertIn(f"{self.program}_x86", metadata["output_hashes"])
+        self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
+        self.assertIn(f"sw/programs/{self.program}/nbody.c", metadata["input_hashes"])
         self.assertTrue(os.access(out_native, os.X_OK))
         self.assertFalse(self.native_exe.exists())
 
@@ -430,6 +454,10 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
         self.assertEqual(metadata["produced"]["files"], [f"{self.program}.elf", f"{self.program}.map"])
+        self.assertIn(f"{self.program}.elf", metadata["output_hashes"])
+        self.assertIn(f"{self.program}.map", metadata["output_hashes"])
+        self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
+        self.assertIn(f"sw/programs/{self.program}/nbody.c", metadata["input_hashes"])
         self.assertFalse(self.elf.exists())
         self.assertFalse(self.map_file.exists())
 
@@ -470,6 +498,10 @@ class ProgramAdapterTests(unittest.TestCase):
             [f"{self.program}_instructions.mem", f"{self.program}_dump_real.asm"],
         )
         self.assertEqual(metadata["dependencies"]["sw.program.elf"], elf_dir.name)
+        self.assertIn(f"{self.program}_instructions.mem", metadata["output_hashes"])
+        self.assertIn(f"{self.program}_dump_real.asm", metadata["output_hashes"])
+        self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
+        self.assertIn(f"sw/programs/{self.program}/nbody.c", metadata["input_hashes"])
         self.assertFalse(out_elf.exists())
         self.assertFalse(out_map.exists())
         self.assertFalse(self.elf.exists())

@@ -32,6 +32,7 @@ class GoalInstance:
     description: str
     lifecycle: str | None = None
     dependencies: tuple[str, ...] = ()
+    dependency_identities: tuple[tuple[str, str], ...] = ()
     expected_outputs: tuple[str, ...] = ()
     side_effects: tuple[str, ...] = ()
     cache_status: ArtifactStatus | None = None
@@ -181,6 +182,9 @@ class Planner:
             description=definition.description,
             lifecycle=definition.lifecycle,
             dependencies=dependency_keys,
+            dependency_identities=tuple(
+                (instance.goal_id, instance.identity) for instance in dependency_instances
+            ),
             expected_outputs=definition.expected_outputs,
             side_effects=definition.side_effects,
         )
@@ -195,6 +199,7 @@ class Planner:
                 description=instance.description,
                 lifecycle=instance.lifecycle,
                 dependencies=instance.dependencies,
+                dependency_identities=instance.dependency_identities,
                 expected_outputs=instance.expected_outputs,
                 side_effects=instance.side_effects,
                 cache_status=read_artifact_status(self.repo_root, instance),

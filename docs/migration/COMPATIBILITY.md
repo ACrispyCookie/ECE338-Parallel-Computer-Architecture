@@ -246,6 +246,24 @@ Compatibility behavior:
 
 This milestone is intentionally a reporting milestone. It gives users visibility into current artifact presence while preserving the existing compatibility-adapter execution path.
 
+## Milestone 18 validated artifact cache status
+
+Milestone 18 strengthens cache reporting so `CACHE HIT` means the artifact validates against recorded metadata, while every other internal status is compactly treated as `CACHE MISS`.
+
+Compatibility behavior:
+
+- old Milestone 17 goal/identity-only metadata becomes `unknown`, shown as `CACHE MISS`;
+- successful artifact runs now write `output_hashes` for produced files;
+- current software artifact runs now write explicit `input_hashes` for `sw/programs/Makefile` and selected program files;
+- missing outputs are `incomplete`/miss;
+- output hash mismatches are `invalid`/miss;
+- input hash changes and dependency identity mismatches are `stale`/miss;
+- verbose plan/explain output reports the detailed internal state and reason;
+- `gpgpu run` still executes adapters even when plan reports `CACHE HIT`;
+- no tool-version validation, command fingerprinting, artifact injection, or cache skipping is implemented yet.
+
+This milestone changes cache-status semantics but not build commands, output filenames, Makefile behavior, or hardware/demo workflows.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:

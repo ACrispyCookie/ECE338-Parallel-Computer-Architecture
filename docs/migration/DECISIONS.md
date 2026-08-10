@@ -182,3 +182,16 @@ Accepted Milestone 17 direction:
 - Verbose plan/explain output reports cache state, path, and reason.
 - `gpgpu run` must continue executing adapters even when plan reports a cache hit until a later cache-execution milestone defines validation and skip semantics.
 - Source hashes, tool versions, generated config hashes, artifact specs, and artifact injection remain deferred.
+
+## Validated artifact cache status
+
+Accepted Milestone 18 direction:
+
+- Compact cache rendering remains binary: `CACHE HIT` only for internal state `hit`; every other internal state renders as `CACHE MISS`.
+- Internal non-hit states include `missing`, `unknown`, `incomplete`, `invalid`, and `stale`.
+- Old metadata without validation hashes is `unknown` and therefore a miss.
+- A validated hit requires matching goal/identity metadata, expected output files, matching output hashes, matching explicit input hashes, and matching direct dependency identities.
+- Successful artifact runs record produced output hashes in `artifact.toml`.
+- Current software artifact goals record explicit input hashes for `sw/programs/Makefile` and selected files under `sw/programs/<program>/` such as C/header/assembly/linker-script files and `fpga.py`.
+- `gpgpu run` still executes adapters even when plan reports a validated hit; cache skipping remains deferred.
+- Tool-version validation, command fingerprints, generated config hashes, full artifact specs, artifact injection, and hardware/action/service/check cache semantics remain deferred.

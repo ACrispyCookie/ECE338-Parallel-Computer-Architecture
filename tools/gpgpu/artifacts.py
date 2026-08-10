@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,22 +32,55 @@ def artifact_dir(repo_root: str | Path, node: GoalInstance) -> Path:
 def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactStatus:
     if node.kind != "artifact":
         return ArtifactStatus("not-artifact", None, "goal is not an artifact")
-    directory = artifact_dir(repo_root, node)
+    root = Path(repo_root)
+    directory = artifact_dir(root, node)
     metadata_path = directory / "artifact.toml"
     if not directory.exists():
-        return ArtifactStatus("miss", directory, "artifact directory missing")
+        return ArtifactStatus("missing", directory, "artifact directory missing")
     if not directory.is_dir():
-        return ArtifactStatus("miss", directory, "artifact path is not a directory")
+        return ArtifactStatus("invalid", directory, "artifact path is not a directory")
     if not metadata_path.exists():
-        return ArtifactStatus("miss", directory, "artifact metadata missing")
+        return ArtifactStatus("missing", directory, "artifact metadata missing")
     try:
         with metadata_path.open("rb") as handle:
             metadata = tomllib.load(handle)
     except tomllib.TOMLDecodeError:
-        return ArtifactStatus("miss", directory, "artifact metadata invalid")
+        return ArtifactStatus("invalid", directory, "artifact metadata invalid")
     if metadata.get("goal") != node.goal_id or metadata.get("identity") != node.identity:
-        return ArtifactStatus("miss", directory, "artifact metadata mismatch")
-    return ArtifactStatus("hit", directory, "artifact metadata matches")
+        return ArtifactStatus("invalid", directory, "artifact metadata mismatch")
+    produced = metadata.get("produced", {})
+    produced_files = produced.get("files", ()) if isinstance(produced, dict) else ()
+    output_hashes = metadata.get("output_hashes")
+    input_hashes = metadata.get("input_hashes")
+    if not isinstance(produced_files, list) or not isinstance(output_hashes, dict) or not isinstance(input_hashes, dict):
+        return ArtifactStatus("unknown", directory, "metadata lacks validation hashes")
+    for relative in produced_files:
+        if not isinstance(relative, str):
+            return ArtifactStatus("invalid", directory, "artifact metadata has invalid produced file entry")
+        output = directory / relative
+        if not output.exists():
+            return ArtifactStatus("incomplete", directory, f"missing output: {relative}")
+        expected = output_hashes.get(relative)
+        if expected is None:
+            return ArtifactStatus("unknown", directory, f"metadata lacks output hash: {relative}")
+        if _sha256_uri(output) != expected:
+            return ArtifactStatus("invalid", directory, f"output hash mismatch: {relative}")
+    for relative, expected in sorted(input_hashes.items()):
+        if not isinstance(relative, str) or not isinstance(expected, str):
+            return ArtifactStatus("invalid", directory, "artifact metadata has invalid input hash entry")
+        source = root / relative
+        if not source.exists():
+            return ArtifactStatus("stale", directory, f"input missing: {relative}")
+        if _sha256_uri(source) != expected:
+            return ArtifactStatus("stale", directory, f"input changed: {relative}")
+    planned_dependencies = _dependency_identities(node)
+    metadata_dependencies = metadata.get("dependencies", {})
+    if planned_dependencies and not isinstance(metadata_dependencies, dict):
+        return ArtifactStatus("stale", directory, "dependency metadata missing")
+    for goal_id, identity in planned_dependencies.items():
+        if metadata_dependencies.get(goal_id) != identity:
+            return ArtifactStatus("stale", directory, f"dependency identity changed: {goal_id}")
+    return ArtifactStatus("hit", directory, "artifact metadata and validation hashes match")
 
 
 def write_artifact_metadata(
@@ -55,6 +89,8 @@ def write_artifact_metadata(
     node: GoalInstance,
     produced: tuple[Path, ...],
     dependency_identities: Mapping[str, str],
+    input_paths: tuple[Path, ...] = (),
+    repo_root: str | Path | None = None,
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     metadata_path = directory / "artifact.toml"
@@ -64,6 +100,8 @@ def write_artifact_metadata(
             node=node,
             produced=produced,
             dependency_identities=dependency_identities,
+            input_paths=input_paths,
+            repo_root=Path(repo_root) if repo_root is not None else directory.parents[3],
         ),
         encoding="utf-8",
     )
@@ -76,6 +114,8 @@ def _render_artifact_metadata(
     node: GoalInstance,
     produced: tuple[Path, ...],
     dependency_identities: Mapping[str, str],
+    input_paths: tuple[Path, ...],
+    repo_root: Path,
 ) -> str:
     lines = [
         f"goal = {_toml_value(node.goal_id)}",
@@ -92,6 +132,14 @@ def _render_artifact_metadata(
     lines.extend(["", "[produced]"])
     relative_files = [_display_path(path, directory) for path in produced]
     lines.append(f"files = [{', '.join(_toml_value(path) for path in relative_files)}]")
+    lines.extend(["", "[output_hashes]"])
+    for path in produced:
+        if path.exists():
+            lines.append(f"{_toml_key(_display_path(path, directory))} = {_toml_value(_sha256_uri(path))}")
+    lines.extend(["", "[input_hashes]"])
+    for path in sorted(input_paths):
+        if path.exists():
+            lines.append(f"{_toml_key(_display_path(path, repo_root))} = {_toml_value(_sha256_uri(path))}")
     if dependency_identities:
         lines.extend(["", "[dependencies]"])
         for goal_id in sorted(dependency_identities):
@@ -105,6 +153,14 @@ def _display_path(path: Path, root: Path) -> str:
         return str(path.relative_to(root))
     except ValueError:
         return str(path)
+
+
+def _dependency_identities(node: GoalInstance) -> dict[str, str]:
+    return dict(getattr(node, "dependency_identities", ()))
+
+
+def _sha256_uri(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _toml_key(key: str) -> str:

@@ -154,6 +154,8 @@ class Executor:
                         nodes_by_key=nodes_by_key,
                         completed=dependency_identities,
                     ),
+                    input_paths=self._input_paths_for(node),
+                    repo_root=self.repo_root,
                 )
             dependency_artifacts[node.goal_id] = result.produced
             dependency_identities[node.goal_id] = node.identity
@@ -199,6 +201,16 @@ class Executor:
             if dependency.goal_id in completed:
                 identities[dependency.goal_id] = completed[dependency.goal_id]
         return identities
+
+    def _input_paths_for(self, node: GoalInstance) -> tuple[Path, ...]:
+        if not node.goal_id.startswith("sw.program."):
+            return ()
+        program = str(self.config.get("program"))
+        program_dir = self.repo_root / "sw" / "programs" / program
+        candidates = [self.repo_root / "sw" / "programs" / "Makefile"]
+        for pattern in ("*.c", "*.h", "*.S", "*.s", "*.ld", "fpga.py"):
+            candidates.extend(program_dir.glob(pattern))
+        return tuple(sorted({path for path in candidates if path.is_file()}))
 
     def _adapter_mapping(self):
         if self._adapters is not None:

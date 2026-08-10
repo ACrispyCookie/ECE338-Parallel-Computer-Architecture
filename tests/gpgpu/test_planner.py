@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import io
 import json
 import shutil
@@ -42,6 +43,22 @@ class PlannerFoundationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        return directory
+
+    def write_validated_metadata(self, node):
+        directory = self.write_metadata(node)
+        output = directory / "validated.out"
+        output.write_text("validated output\n", encoding="utf-8")
+        input_path = ROOT / "sw" / "programs" / "nbody" / "nbody.c"
+        output_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+        input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
+        with (directory / "artifact.toml").open("a", encoding="utf-8") as handle:
+            handle.write("[produced]\n")
+            handle.write('files = ["validated.out"]\n\n')
+            handle.write("[output_hashes]\n")
+            handle.write(f'"validated.out" = "sha256:{output_hash}"\n\n')
+            handle.write("[input_hashes]\n")
+            handle.write(f'"sw/programs/nbody/nbody.c" = "sha256:{input_hash}"\n')
         return directory
 
     def test_runtime_options_do_not_change_native_program_identity(self):
@@ -218,7 +235,7 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_plan_reports_cache_hit_for_matching_artifact_metadata(self):
         config = ConfigResolver().resolve(set_values=["program=nbody"])
         initial = Planner(config, repo_root=ROOT).plan("sw.program.elf")
-        self.write_metadata(initial.root)
+        self.write_validated_metadata(initial.root)
 
         rendered = Planner(config, repo_root=ROOT).plan("sw.program.elf").format_plan()
 
@@ -233,7 +250,7 @@ class PlannerFoundationTests(unittest.TestCase):
         rendered = Planner(config, repo_root=ROOT).plan("sw.program.elf").format_plan(verbose=True)
 
         self.assertIn("CACHE MISS", rendered)
-        self.assertIn("↳ cache       miss", rendered)
+        self.assertIn("↳ cache       invalid", rendered)
         self.assertIn("artifact metadata mismatch", rendered)
         self.assertIn("out/artifacts/sw.program.elf/", rendered)
 

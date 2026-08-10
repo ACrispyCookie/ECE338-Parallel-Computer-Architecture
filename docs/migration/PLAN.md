@@ -434,6 +434,40 @@ Expected evidence:
 - tests cover missing metadata, matching metadata, metadata mismatch, non-artifact compact output, and run-not-skipped behavior;
 - planner, executor, cleaner, legacy characterization, and full discovery tests pass.
 
+## Completed cache-validation milestone
+
+### Milestone 18: validated artifact cache status
+
+Objective: strengthen cache status so compact `CACHE HIT` means the artifact validates against recorded outputs, inputs, and direct dependency identities. Every internal status other than `hit` is rendered compactly as `CACHE MISS`.
+
+Scope:
+
+- old goal/identity-only metadata is now `unknown` and compact `CACHE MISS`;
+- successful artifact runs record output file hashes in `artifact.toml`;
+- successful software artifact runs record explicit source/input hashes for `sw/programs/Makefile` and selected program files;
+- cache validation checks produced file existence, output hashes, input hashes, and direct dependency identities;
+- verbose plan/explain output reports internal states such as `missing`, `unknown`, `incomplete`, `invalid`, and `stale`;
+- `gpgpu run` still executes adapters even when cache status is `hit`.
+
+Non-goals:
+
+- no cache skipping;
+- no tool-version validation;
+- no full artifact specs;
+- no artifact injection;
+- no hardware/action/service/check cache semantics.
+
+Expected evidence:
+
+- old metadata without validation hashes becomes `unknown`/miss;
+- matching output and input hashes produce a validated hit;
+- missing output files become `incomplete`/miss;
+- changed output hashes become `invalid`/miss;
+- changed input hashes become `stale`/miss;
+- dependency identity mismatches become `stale`/miss;
+- adapter-written metadata includes `output_hashes` and `input_hashes`;
+- planner, artifact, executor, cleaner, legacy characterization, and full discovery tests pass.
+
 ## Dependency execution policy
 
 Dependencies are declared in `tools/gpgpu/goals.py` on `GoalDefinition.dependencies`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
@@ -544,8 +578,8 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Consider cache validation inputs, such as source hashes and relevant tool versions, before execution skipping.
-2. Consider cache-aware `gpgpu run` only after validation semantics are explicit.
+1. Consider tool-version and command-fingerprint validation before execution skipping.
+2. Consider cache-aware `gpgpu run` only after validation semantics are explicit enough for the chosen goals.
 3. Consider `test.program` as a check goal for native-vs-image comparison.
 4. Connect RTL test goals behind adapters only after characterization.
 5. Connect UART/board action goals behind explicit hardware-state policies.
