@@ -107,8 +107,12 @@ def load_test(tests_dir: Path, test_number: int) -> dict[str, object]:
                 raise ValueError(f"{trace_path}:{line_number}: invalid cycle {row[0]!r}") from error
 
             cycle: dict[str, object] = {"cycle": cycle_number}
-            for stage, raw_pc in zip(STAGES, row[1:]):
-                pc = normalize_pc(raw_pc)
+            trace_index = len(cycles)
+            for stage_index, (stage, raw_pc) in enumerate(zip(STAGES, row[1:])):
+                # The RTL resets every stage PC register to INITIAL_PC. During
+                # startup those deeper-stage zeros are empty pipeline slots,
+                # not additional instances of the first instruction.
+                pc = None if trace_index < stage_index else normalize_pc(raw_pc)
                 cycle[stage] = None if pc is None else {
                     "pc": pc,
                     "instruction": instruction_by_pc.get(pc, f"unknown instruction @ 0x{pc}"),
