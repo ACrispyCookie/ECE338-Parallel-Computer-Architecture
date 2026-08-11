@@ -148,9 +148,7 @@ Justification:
 
 Current issues:
 
-- `ConfigResolver` owns schema, TOML loading, flattening, coercion, precedence, and provenance; this may need splitting later.
-- `TOOL_ENV_DEFAULTS` is named like discovery but currently just assigns defaults.
-- `GOAL_DEFAULTS` is global fallback behavior, not truly per-goal defaults.
+- `ConfigResolver` owns schema loading, TOML loading, flattening, coercion, precedence, and provenance; this may need splitting later.
 - CLI selection settings declare `manifest_dir` in `SettingSpec`; selection overrides are applied before selected manifests and all CLI overrides are applied again at final precedence.
 - Config values such as `program.optimization`, `program.march`, and `program.mabi` affect identities, but the Makefile backend still hardcodes corresponding flags.
 
@@ -547,8 +545,6 @@ Current limitation:
 | `format_run_result()`/`format_run_summary()` | Older formatting alongside reporters. | Duplicate presentation paths. | Keep as debug helpers or remove in a later formatting cleanup. |
 | Migration docs status split | Historical milestone records and current branch status are mixed in long docs. | Readers can confuse old milestone facts with current status. | Keep `CURRENT_STATE.md` as the current map and split historical/current sections where needed. |
 | `sw.program.image` expected outputs | Claims data-memory image artifact. | Current adapter does not produce one. | Align expected outputs with actual produced artifacts. |
-| `ConfigResolver.TOOL_ENV_DEFAULTS` | Name implies discovery but no discovery occurs. | Misleading abstraction. | Rename or implement real discovery later. |
-| `ConfigResolver.GOAL_DEFAULTS` | Global, not truly per-goal. | Could become confusing as graph grows. | Move defaults into goal/component manifests. |
 | Makefile flag hardcoding | Planner settings affect identity but not actual command. | Identity can vary while output command does not. | Decide Make variable pass-through vs Python-native backend. |
 | Reporter type hints | Uses `Any`. | Less clear contracts. | Use protocols once interfaces settle. |
 

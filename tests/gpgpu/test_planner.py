@@ -233,6 +233,9 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertTrue((config_root / "profiles" / "zed-demo.toml").exists())
         self.assertFalse((config_root / "profiles.toml").exists())
 
+        self.assertFalse(hasattr(ConfigResolver, "GOAL_DEFAULTS"))
+        self.assertFalse(hasattr(ConfigResolver, "TOOL_ENV_DEFAULTS"))
+
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("board_type"), "zynq7000-zedboard")
         self.assertEqual(config.get("board"), "zedboard")

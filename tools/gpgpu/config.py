@@ -136,15 +136,6 @@ class ConfigResolver:
 
     SCHEMA = load_schema(_default_repo_root() / "config" / "gpgpu" / "schema.toml")
 
-    GOAL_DEFAULTS: dict[str, Any] = {
-        "backend": "fake",
-        "kernel.kernel_calls": 1,
-    }
-
-    TOOL_ENV_DEFAULTS: dict[str, Any] = {
-        "toolchain": "riscv-gcc-rv32im-ilp32",
-    }
-
     def __init__(self, config_root: str | Path | None = None):
         repo_root = _default_repo_root()
         self.repo_root = repo_root
@@ -180,15 +171,7 @@ class ConfigResolver:
         if profile_mapping is not None and profile_source is not None:
             self._apply_mapping(values, provenance, profile_mapping, profile_source)
 
-        for key, value in self.GOAL_DEFAULTS.items():
-            if key not in provenance or provenance[key].source == "schema default":
-                self._assign(values, provenance, key, value, "goal default")
-
         self._apply_local(values, provenance)
-
-        for key, value in self.TOOL_ENV_DEFAULTS.items():
-            if key not in provenance or provenance[key].source == "schema default":
-                self._assign(values, provenance, key, value, "tool discovery default")
 
         for key, raw_value in cli_overrides:
             self._assign(values, provenance, key, raw_value, "CLI --set")
