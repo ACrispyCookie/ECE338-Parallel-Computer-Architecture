@@ -15,17 +15,17 @@ The repository now has a working typed goal planner, config resolver, graph exec
 
 The foundation is useful, but it is not yet a complete build system for the original project mission. Most hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only.
 
-Most important cleanup findings:
+Most important cleanup findings after Milestone 21:
 
 1. Check-goal parameter modeling is likely wrong: non-artifact check goals currently ignore `artifact_params` during planning.
-2. `Executor._input_paths_for` is transitional and should move into declarative artifact/input specs.
-3. Cache validation records and checks listed inputs, but does not compare against a current expected input set, so newly added inputs can be missed.
-4. Software adapters do not fail if `make` returns success but required outputs are missing.
-5. Dependency identities are keyed by goal id, which will not handle multiple instances of the same goal.
-6. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
-7. CLI selection settings are now schema-declared manifest selectors; CLI selection overrides are applied early enough to load the selected manifest and then reapplied at final CLI precedence.
-8. CLI now passes one repo root into planner, executor, and cleaner without adding a new helper file.
-9. Some migration docs contained historical statements that were stale if read as current status; the top-level compatibility status has now been corrected, but docs still need clearer historical/current separation.
+2. Software adapters do not fail if `make` returns success but required outputs are missing.
+3. Dependency identities are keyed by goal id, which will not handle multiple instances of the same goal.
+4. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
+5. Configuration schema now lives in `config/gpgpu/schema.toml`; Python loads and validates it.
+6. Goal/dependency/artifact definitions now live in `config/gpgpu/goals.toml`; Python loads and validates them.
+7. Artifact cache validation now compares current declarative input/output specs against recorded metadata, so newly added matching source files invalidate old artifacts.
+8. CLI selection settings are schema-declared manifest selectors and CLI passes one repo root into planner, executor, and cleaner.
+9. Some migration docs still mix historical and current status; `CURRENT_STATE.md` remains the current branch map.
 
 ## Current goal coverage
 
@@ -129,7 +129,7 @@ Current issues:
 
 - `implementation_version` defaults to `"mock-v1"`, which is stale for real software adapters.
 - `hw.board.project` is still explicitly mock-only.
-- `sw.program.image` lists a data-memory artifact even though the current adapter produces only instruction memory and dump output.
+- `sw.program.image` now declares current adapter reality: instruction-memory image plus objdump artifact, not a fake data-memory artifact.
 - `test.rtl` and `test.program` declare `artifact_params`, but current planner logic ignores those params for check goals.
 
 ### `tools/gpgpu/config.py`
@@ -220,7 +220,7 @@ Justification:
 
 Current issues:
 
-- Validation checks recorded input hashes but does not compare recorded inputs against a current expected input declaration.
+- Validation now compares recorded input/output metadata against current declarative artifact specs before checking hashes.
 - `_dependency_identities(node)` uses a hidden `GoalInstance` attribute contract.
 - Dependencies are keyed by goal id, not by dependency role or stable edge id.
 - `write_artifact_metadata()` can infer repo root from `directory.parents[3]` if none is passed; this fallback is brittle.
@@ -249,7 +249,7 @@ Justification:
 
 Current issues:
 
-- `_input_paths_for()` is transitional, software-specific, and should move to declarative artifact/input specs.
+- Artifact input selection is now delegated to declarative specs through `resolve_artifact_inputs()`.
 - `format_run_result()` and `format_run_summary()` overlap with `reporter.py` and may be legacy debug helpers.
 - Adapter success does not currently require all declared produced files to exist.
 - Direct dependency identities are keyed by goal id, not by dependency role/edge/instance.
@@ -526,7 +526,7 @@ Current limitation:
 
 | Location | Issue | Current note |
 |---|---|---|
-| `Executor._input_paths_for()` | Software-specific input selector in executor. | Documented as transitional in code/doc decision. Should move to artifact specs. |
+| Artifact specs | Declarative goal-owned specs now live in `config/gpgpu/goals.toml`, removing executor-side software input selection. | Extend specs with typed produced artifacts and command/tool fingerprints later. |
 | `sw.program.*` adapters | Compatibility wrappers over Makefile. | Documented as current compatibility backend. |
 | `hw.board.project` | Mock internal Vivado artifact. | Name/description marks mock. Needs replacement before Vivado work. |
 | `gpgpu run` cache behavior | Plan reports hit but run does not skip. | Documented as deferred. |

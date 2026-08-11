@@ -5,7 +5,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Mapping
 
-from .artifacts import artifact_dir, write_artifact_metadata
+from .artifacts import artifact_dir, resolve_artifact_inputs, write_artifact_metadata
 from .config import ResolvedConfig
 from .planner import GoalInstance, Plan
 
@@ -154,7 +154,7 @@ class Executor:
                         nodes_by_key=nodes_by_key,
                         completed=dependency_identities,
                     ),
-                    input_paths=self._input_paths_for(node),
+                    input_paths=resolve_artifact_inputs(self.repo_root, node, self.config),
                     repo_root=self.repo_root,
                 )
             dependency_artifacts[node.goal_id] = result.produced
@@ -185,25 +185,6 @@ class Executor:
             if dependency.goal_id in completed:
                 identities[dependency.goal_id] = completed[dependency.goal_id]
         return identities
-
-    def _input_paths_for(self, node: GoalInstance) -> tuple[Path, ...]:
-        """Return the current conservative cache-validation input set.
-
-        This is intentionally a temporary software-goal selector, not a
-        general artifact-spec interface. It exists so Milestone 18 can validate
-        cache status without hashing entire program directories or generated
-        outputs. Future milestones should move these input declarations onto
-        goal/artifact metadata next to expected outputs, adapter ownership, and
-        tool-command fingerprints.
-        """
-        if not node.goal_id.startswith("sw.program."):
-            return ()
-        program = str(self.config.get("program"))
-        program_dir = self.repo_root / "sw" / "programs" / program
-        candidates = [self.repo_root / "sw" / "programs" / "Makefile"]
-        for pattern in ("*.c", "*.h", "*.S", "*.s", "*.ld", "fpga.py"):
-            candidates.extend(program_dir.glob(pattern))
-        return tuple(sorted({path for path in candidates if path.is_file()}))
 
     def _adapter_mapping(self):
         if self._adapters is not None:

@@ -534,9 +534,40 @@ Expected evidence:
 - executor structure tests prove `run_plan()` is the only public run API;
 - full test discovery passes.
 
+### Milestone 21: declarative schema, goals, and artifact specs
+
+Objective: move substantial control-plane definitions out of Python source and into declarative project data.
+
+Scope:
+
+- `config/gpgpu/schema.toml` declares settings, types, defaults, scopes, enum choices, and manifest selectors;
+- `config/gpgpu/goals.toml` declares goals, params, visibility, dependencies, notes, and artifact input/output specs;
+- `tools/gpgpu/config.py` loads and validates schema TOML instead of owning a hardcoded schema table;
+- `tools/gpgpu/goals.py` loads and validates goal TOML instead of owning a hardcoded goal table;
+- `tools/gpgpu/artifacts.py` resolves declarative input/output specs and compares current expected input/output sets against metadata;
+- `Executor._input_paths_for()` is removed;
+- `sw.program.image` expected outputs now match current adapter reality: instruction-memory image plus objdump artifact.
+
+Non-goals:
+
+- no new executable goals or adapters;
+- no cache skipping;
+- no artifact injection;
+- no tool-version/command fingerprints;
+- no Makefile flag plumbing;
+- no legacy script deletion.
+
+Expected evidence:
+
+- RED tests first for missing declarative files/loaders/specs and stale source-embedded tables;
+- invalid schema/goal fixture tests reject enum-without-choices, unknown schema fields, unknown dependency goals, unknown params, absolute artifact paths, and unknown placeholders;
+- adding a new matching source file changes the expected input set and makes old metadata stale;
+- full test discovery passes;
+- smoke run/plan/explain/clean cycle still works.
+
 ## Dependency execution policy
 
-Dependencies are declared in `tools/gpgpu/goals.py` on `GoalDefinition.dependencies`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
+Dependencies are declared in `config/gpgpu/goals.toml` and loaded into typed `GoalDefinition.dependencies` records by `tools/gpgpu/goals.py`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
 
 `gpgpu run <goal>` executes registered adapters in the plan's topological order. Public goals, check goals, action goals, and service goals without adapters fail during preflight before any dependency adapter runs. Internal placeholder goals should not be added unless they represent a real artifact boundary; `sw.program.compile_riscv` was removed because `sw.program.elf` is the current compile/link artifact boundary.
 
@@ -612,7 +643,7 @@ Long-term direction: executor should walk a validated planned graph in dependenc
 
 ## Future `config.py` direction
 
-`config.py` currently combines schema definition, TOML loading, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. That is acceptable for the foundation but should be split once the model stabilizes.
+`config.py` currently owns schema loading/validation, TOML loading, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. The setting definitions themselves live in `config/gpgpu/schema.toml`.
 
 Near-term rule:
 
@@ -644,13 +675,12 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-After Milestone 20, remaining cleanup should continue toward final cache-safe goals:
+After Milestone 21, remaining cleanup should continue toward final cache-safe goals:
 
-1. Declarative artifact specs: move software input selection out of `Executor._input_paths_for`, declare expected inputs/outputs per artifact goal, and compare expected input sets against recorded metadata.
-2. Strict adapter output contracts: fail adapters when required outputs are missing and replace suffix-based dependency artifact lookup with typed produced artifacts.
-3. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
-4. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
-5. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
+1. Strict adapter output contracts: fail adapters when required outputs are missing and replace suffix-based dependency artifact lookup with typed produced artifacts.
+2. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
+3. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
+4. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
 
 ## Rollback
 

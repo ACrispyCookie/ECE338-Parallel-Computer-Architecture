@@ -1,9 +1,25 @@
 from __future__ import annotations
 
+import re
+import string
+import tomllib
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Mapping
 
+from .config import SettingSpec
 
 GoalKind = str
+
+
+class GoalConfigError(ValueError):
+    """Raised when declarative goal definitions are invalid."""
+
+
+@dataclass(frozen=True)
+class ArtifactSpec:
+    input_globs: tuple[str, ...] = ()
+    outputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -38,151 +54,234 @@ class GoalDefinition:
     side_effects: tuple[str, ...] = ()
     dependencies: tuple[GoalDependency, ...] = ()
     omitted_dependency_notes: tuple[GoalNote, ...] = ()
+    artifact: ArtifactSpec | None = None
 
     @property
     def cacheable(self) -> bool:
         return self.kind == "artifact"
 
 
-GOALS: dict[str, GoalDefinition] = {
-    "sw.program.native": GoalDefinition(
-        goal_id="sw.program.native",
-        kind="artifact",
-        public=True,
-        description="Build a native reference executable for a selected program.",
-        artifact_params=("program", "program.optimization"),
-        expected_outputs=("native reference executable artifact",),
-    ),
-    "sw.program.elf": GoalDefinition(
-        goal_id="sw.program.elf",
-        kind="artifact",
-        public=True,
-        description="Build a RISC-V ELF for the selected GPGPU program.",
-        artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
-        expected_outputs=("RISC-V ELF artifact",),
-    ),
-    "sw.program.image": GoalDefinition(
-        goal_id="sw.program.image",
-        kind="artifact",
-        public=True,
-        description="Build an instruction-memory image for the selected program.",
-        artifact_params=("program", "architecture", "program.optimization", "program.march", "program.mabi"),
-        expected_outputs=("instruction-memory image artifact", "data-memory image artifact"),
-        dependencies=(GoalDependency("sw.program.elf", role="elf"),),
-    ),
-    "hw.board.project": GoalDefinition(
-        goal_id="hw.board.project",
-        kind="artifact",
-        public=False,
-        description="Internal mock Vivado project artifact.",
-        artifact_params=("architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part"),
-        expected_outputs=("board project artifact",),
-    ),
-    "hw.board.bitstream": GoalDefinition(
-        goal_id="hw.board.bitstream",
-        kind="artifact",
-        public=True,
-        description="Build a programmable-logic bitstream.",
-        artifact_params=("architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"),
-        expected_outputs=("bitstream artifact",),
-        dependencies=(GoalDependency("hw.board.project", role="project"),),
-    ),
-    "hw.board.program": GoalDefinition(
-        goal_id="hw.board.program",
-        kind="action",
-        public=True,
-        description="Configure the selected board with a compatible bitstream.",
-        runtime_params=("board", "board.configure_policy", "board.port"),
-        side_effects=("configure selected board FPGA fabric",),
-        dependencies=(GoalDependency("hw.board.bitstream", role="bitstream"),),
-    ),
-    "hw.board.kernel.load": GoalDefinition(
-        goal_id="hw.board.kernel.load",
-        kind="action",
-        public=True,
-        description="Load a GPGPU program image and initial data into hardware.",
-        runtime_params=("board", "kernel.load_policy", "uart.baud"),
-        side_effects=("load selected program image into board memory",),
-        dependencies=(
-            GoalDependency("hw.board.program", role="configured_board"),
-            GoalDependency("sw.program.image", role="program_image"),
-        ),
-    ),
-    "hw.board.kernel.run": GoalDefinition(
-        goal_id="hw.board.kernel.run",
-        kind="action",
-        public=True,
-        description="Run a loaded GPGPU kernel through the current transport.",
-        runtime_params=("board", "kernel.kernel_calls"),
-        side_effects=("run loaded kernel on selected board",),
-        dependencies=(GoalDependency("hw.board.kernel.load", role="loaded_kernel"),),
-    ),
-    "demo.run": GoalDefinition(
-        goal_id="demo.run",
-        kind="service",
-        public=True,
-        description="Run the selected interactive demo service.",
-        runtime_params=("demo", "backend", "demo.fps", "demo.dataset", "demo.steps_per_frame", "demo.http_host", "demo.http_port"),
-        lifecycle="long-running",
-        side_effects=("start selected interactive demo service",),
-        dependencies=(
-            GoalDependency("sw.program.native", role="native_reference", when=(("backend", "fake"),)),
+def _default_goals_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "config" / "gpgpu" / "goals.toml"
+
+
+def load_goals(path: str | Path, *, schema: Mapping[str, SettingSpec]) -> dict[str, GoalDefinition]:
+    goals_path = Path(path)
+    try:
+        with goals_path.open("rb") as handle:
+            data = tomllib.load(handle)
+    except tomllib.TOMLDecodeError as exc:
+        raise GoalConfigError(f"Invalid TOML in {goals_path}: {exc}") from exc
+    goals_data = data.get("goals")
+    if not isinstance(goals_data, dict) or not goals_data:
+        raise GoalConfigError(f"{goals_path}: missing [goals] table")
+
+    loaded: dict[str, GoalDefinition] = {}
+    for goal_id, entry in goals_data.items():
+        loaded[goal_id] = _load_goal(goal_id, entry, schema=schema)
+    _validate_goal_references(loaded, schema=schema)
+    return loaded
+
+
+def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]) -> GoalDefinition:
+    if not _valid_dotted_name(goal_id):
+        raise GoalConfigError(f"Invalid goal id: {goal_id!r}")
+    if not isinstance(entry, dict):
+        raise GoalConfigError(f"Goal {goal_id} must be a table")
+    allowed = {
+        "kind",
+        "public",
+        "description",
+        "artifact_params",
+        "runtime_params",
+        "implementation_version",
+        "lifecycle",
+        "expected_outputs",
+        "side_effects",
+        "dependencies",
+        "omitted_dependency_notes",
+        "artifact",
+    }
+    unknown = set(entry) - allowed
+    if unknown:
+        raise GoalConfigError(f"Unknown goal field for {goal_id}: {sorted(unknown)[0]}")
+    for required in ("kind", "public", "description"):
+        if required not in entry:
+            raise GoalConfigError(f"Goal {goal_id} missing {required}")
+    kind = entry["kind"]
+    if kind not in {"artifact", "action", "service", "check"}:
+        raise GoalConfigError(f"Invalid goal kind for {goal_id}: {kind!r}")
+    public = entry["public"]
+    if not isinstance(public, bool):
+        raise GoalConfigError(f"Goal {goal_id} public must be boolean")
+    description = entry["description"]
+    if not isinstance(description, str) or not description:
+        raise GoalConfigError(f"Goal {goal_id} description must be a non-empty string")
+    lifecycle = entry.get("lifecycle")
+    if lifecycle is not None and (kind != "service" or not isinstance(lifecycle, str)):
+        raise GoalConfigError(f"Goal {goal_id} lifecycle is only valid for service goals")
+
+    artifact_params = _string_tuple(entry.get("artifact_params", ()), f"Goal {goal_id} artifact_params")
+    runtime_params = _string_tuple(entry.get("runtime_params", ()), f"Goal {goal_id} runtime_params")
+    expected_outputs = _string_tuple(entry.get("expected_outputs", ()), f"Goal {goal_id} expected_outputs")
+    side_effects = _string_tuple(entry.get("side_effects", ()), f"Goal {goal_id} side_effects")
+    implementation_version = entry.get("implementation_version", "mock-v1")
+    if not isinstance(implementation_version, str):
+        raise GoalConfigError(f"Goal {goal_id} implementation_version must be a string")
+    artifact = _load_artifact_spec(goal_id, entry.get("artifact"), schema=schema)
+
+    return GoalDefinition(
+        goal_id=goal_id,
+        kind=kind,
+        public=public,
+        description=description,
+        artifact_params=artifact_params,
+        runtime_params=runtime_params,
+        implementation_version=implementation_version,
+        lifecycle=lifecycle,
+        expected_outputs=expected_outputs,
+        side_effects=side_effects,
+        dependencies=tuple(_load_dependencies(goal_id, entry.get("dependencies", ()), schema=schema)),
+        omitted_dependency_notes=tuple(_load_notes(goal_id, entry.get("omitted_dependency_notes", ()), schema=schema)),
+        artifact=artifact,
+    )
+
+
+def _load_dependencies(goal_id: str, entries: object, *, schema: Mapping[str, SettingSpec]) -> list[GoalDependency]:
+    if entries in (None, ()):
+        return []
+    if not isinstance(entries, list):
+        raise GoalConfigError(f"Goal {goal_id} dependencies must be a list")
+    dependencies: list[GoalDependency] = []
+    roles: set[str] = set()
+    for item in entries:
+        if not isinstance(item, dict):
+            raise GoalConfigError(f"Goal {goal_id} dependency must be a table")
+        role = item.get("role")
+        dep_goal = item.get("goal")
+        if not isinstance(role, str) or not role:
+            raise GoalConfigError(f"Goal {goal_id} dependency missing role")
+        if role in roles:
+            raise GoalConfigError(f"Goal {goal_id} duplicate dependency role: {role}")
+        roles.add(role)
+        if not isinstance(dep_goal, str) or not dep_goal:
+            raise GoalConfigError(f"Goal {goal_id} dependency {role} missing goal")
+        dependencies.append(
             GoalDependency(
-                "hw.board.kernel.load",
-                role="loaded_kernel",
-                when=(("backend", "fpga-uart"),),
-                note_kind="included",
-                note_subject="hw.board.kernel.load",
-                note_reason="backend=fpga-uart requires hardware program-image load",
-            ),
-        ),
-        omitted_dependency_notes=(
-            GoalNote(
-                kind="omitted",
-                subject="hw.board.bitstream, hw.board.program, hw.board.kernel.load",
-                reason="backend=fake uses native reference path",
-                when=(("backend", "fake"),),
-            ),
-        ),
-    ),
-    "test.rtl": GoalDefinition(
-        goal_id="test.rtl",
-        kind="check",
-        public=True,
-        description="Run the RTL simulation test suite.",
-        artifact_params=("architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"),
-        expected_outputs=("RTL check result",),
-        dependencies=(
-            GoalDependency("hw.rtl.assemble", role="assembly_fixture"),
-            GoalDependency("hw.rtl.sim_executable", role="sim_executable"),
-        ),
-    ),
-    "test.program": GoalDefinition(
-        goal_id="test.program",
-        kind="check",
-        public=True,
-        description="Compare a native program run against generated program artifacts.",
-        artifact_params=("program", "architecture", "program.optimization"),
-        expected_outputs=("program comparison check result",),
-        dependencies=(
-            GoalDependency("sw.program.native", role="native_reference"),
-            GoalDependency("sw.program.image", role="program_image"),
-        ),
-    ),
-    "hw.rtl.assemble": GoalDefinition(
-        goal_id="hw.rtl.assemble",
-        kind="artifact",
-        public=False,
-        description="Internal assembly fixture generation.",
-        artifact_params=("architecture", "rtl.imem_words", "rtl.dmem_words"),
-        expected_outputs=("RTL assembly fixture artifact",),
-    ),
-    "hw.rtl.sim_executable": GoalDefinition(
-        goal_id="hw.rtl.sim_executable",
-        kind="artifact",
-        public=False,
-        description="Internal Icarus simulation executable.",
-        artifact_params=("architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"),
-        expected_outputs=("RTL simulation executable artifact",),
-    ),
-}
+                goal_id=dep_goal,
+                role=role,
+                when=_condition_tuple(item.get("when", {}), schema=schema),
+                note_kind=_optional_str(item.get("note_kind"), f"Goal {goal_id} dependency note_kind"),
+                note_subject=_optional_str(item.get("note_subject"), f"Goal {goal_id} dependency note_subject"),
+                note_reason=_optional_str(item.get("note_reason"), f"Goal {goal_id} dependency note_reason"),
+            )
+        )
+    return dependencies
+
+
+def _load_notes(goal_id: str, entries: object, *, schema: Mapping[str, SettingSpec]) -> list[GoalNote]:
+    if entries in (None, ()):
+        return []
+    if not isinstance(entries, list):
+        raise GoalConfigError(f"Goal {goal_id} omitted_dependency_notes must be a list")
+    notes: list[GoalNote] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            raise GoalConfigError(f"Goal {goal_id} note must be a table")
+        try:
+            kind = item["kind"]
+            subject = item["subject"]
+            reason = item["reason"]
+        except KeyError as exc:
+            raise GoalConfigError(f"Goal {goal_id} note missing {exc.args[0]}") from exc
+        if not all(isinstance(value, str) and value for value in (kind, subject, reason)):
+            raise GoalConfigError(f"Goal {goal_id} note fields must be non-empty strings")
+        notes.append(GoalNote(kind=kind, subject=subject, reason=reason, when=_condition_tuple(item.get("when", {}), schema=schema)))
+    return notes
+
+
+def _load_artifact_spec(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]) -> ArtifactSpec | None:
+    if entry is None:
+        return None
+    if not isinstance(entry, dict):
+        raise GoalConfigError(f"Goal {goal_id} artifact spec must be a table")
+    unknown = set(entry) - {"input_globs", "outputs"}
+    if unknown:
+        raise GoalConfigError(f"Unknown artifact field for {goal_id}: {sorted(unknown)[0]}")
+    spec = ArtifactSpec(
+        input_globs=_string_tuple(entry.get("input_globs", ()), f"Goal {goal_id} artifact.input_globs"),
+        outputs=_string_tuple(entry.get("outputs", ()), f"Goal {goal_id} artifact.outputs"),
+    )
+    for value in (*spec.input_globs, *spec.outputs):
+        _validate_artifact_path_template(value, schema=schema)
+    return spec
+
+
+def _validate_goal_references(goals: Mapping[str, GoalDefinition], *, schema: Mapping[str, SettingSpec]) -> None:
+    for goal in goals.values():
+        for param in (*goal.artifact_params, *goal.runtime_params):
+            if param not in schema:
+                raise GoalConfigError(f"Unknown setting referenced by {goal.goal_id}: {param}")
+        for dependency in goal.dependencies:
+            if dependency.goal_id not in goals:
+                raise GoalConfigError(f"Unknown dependency goal for {goal.goal_id}: {dependency.goal_id}")
+
+
+def _condition_tuple(mapping: object, *, schema: Mapping[str, SettingSpec]) -> tuple[tuple[str, object], ...]:
+    if mapping in (None, {}):
+        return ()
+    if not isinstance(mapping, dict):
+        raise GoalConfigError("Dependency conditions must be a table")
+    pairs: list[tuple[str, object]] = []
+    for key, value in mapping.items():
+        if key not in schema:
+            raise GoalConfigError(f"Unknown setting referenced in condition: {key}")
+        pairs.append((key, value))
+    return tuple(sorted(pairs))
+
+
+def _validate_artifact_path_template(template: str, *, schema: Mapping[str, SettingSpec]) -> None:
+    if template.startswith("/"):
+        raise GoalConfigError("artifact paths must be repository-relative")
+    parts = Path(template).parts
+    if ".." in parts:
+        raise GoalConfigError("artifact paths must not escape the repository")
+    for _, field_name, _, _ in string.Formatter().parse(template):
+        if field_name is not None and field_name not in schema:
+            raise GoalConfigError(f"Unknown artifact placeholder: {field_name}")
+
+
+def _string_tuple(value: object, label: str) -> tuple[str, ...]:
+    if value in (None, ()):
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise GoalConfigError(f"{label} must be a list of strings")
+    return tuple(value)
+
+
+def _optional_str(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise GoalConfigError(f"{label} must be a string")
+    return value
+
+
+def _valid_dotted_name(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", value))
+
+
+from .config import ConfigResolver  # noqa: E402  # imported after definitions to keep loader types available
+
+GOALS = load_goals(_default_goals_path(), schema=ConfigResolver.SCHEMA)
+
+__all__ = [
+    "ArtifactSpec",
+    "GoalConfigError",
+    "GoalDefinition",
+    "GoalDependency",
+    "GoalKind",
+    "GoalNote",
+    "GOALS",
+    "load_goals",
+]

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
+    from .config import ResolvedConfig
     from .planner import GoalInstance
 
 
@@ -54,6 +55,26 @@ def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactS
     input_hashes = metadata.get("input_hashes")
     if not isinstance(produced_files, list) or not isinstance(output_hashes, dict) or not isinstance(input_hashes, dict):
         return ArtifactStatus("unknown", directory, "metadata lacks validation hashes")
+
+    expected_outputs = {_display_path(path, directory) for path in resolve_artifact_outputs(directory, node)}
+    if expected_outputs:
+        recorded_outputs = {relative for relative in produced_files if isinstance(relative, str)}
+        if recorded_outputs != expected_outputs:
+            missing = sorted(expected_outputs - recorded_outputs)
+            extra = sorted(recorded_outputs - expected_outputs)
+            if missing:
+                return ArtifactStatus("incomplete", directory, f"missing output: {missing[0]}")
+            return ArtifactStatus("stale", directory, f"output set changed: {extra[0]}")
+
+    expected_inputs = {_display_path(path, root) for path in resolve_artifact_inputs(root, node)}
+    if expected_inputs:
+        recorded_inputs = {relative for relative in input_hashes if isinstance(relative, str)}
+        if recorded_inputs != expected_inputs:
+            missing = sorted(expected_inputs - recorded_inputs)
+            extra = sorted(recorded_inputs - expected_inputs)
+            changed = missing[0] if missing else extra[0]
+            return ArtifactStatus("stale", directory, f"input set changed: {changed}")
+
     for relative in produced_files:
         if not isinstance(relative, str):
             return ArtifactStatus("invalid", directory, "artifact metadata has invalid produced file entry")
@@ -81,6 +102,40 @@ def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactS
         if metadata_dependencies.get(goal_id) != identity:
             return ArtifactStatus("stale", directory, f"dependency identity changed: {goal_id}")
     return ArtifactStatus("hit", directory, "artifact metadata and validation hashes match")
+
+
+def resolve_artifact_inputs(
+    repo_root: str | Path,
+    node: GoalInstance,
+    config: ResolvedConfig | None = None,
+) -> tuple[Path, ...]:
+    from .goals import GOALS
+
+    goal = GOALS.get(node.goal_id)
+    if goal is None or goal.artifact is None:
+        return ()
+    params = _template_values(node, config)
+    root = Path(repo_root)
+    paths: set[Path] = set()
+    for pattern in goal.artifact.input_globs:
+        relative_pattern = pattern.format_map(params)
+        paths.update(path for path in root.glob(relative_pattern) if path.is_file())
+    return tuple(sorted(paths))
+
+
+def resolve_artifact_outputs(
+    directory: str | Path,
+    node: GoalInstance,
+    config: ResolvedConfig | None = None,
+) -> tuple[Path, ...]:
+    from .goals import GOALS
+
+    goal = GOALS.get(node.goal_id)
+    if goal is None or goal.artifact is None:
+        return ()
+    params = _template_values(node, config)
+    root = Path(directory)
+    return tuple(root / template.format_map(params) for template in goal.artifact.outputs)
 
 
 def write_artifact_metadata(
@@ -148,6 +203,14 @@ def _render_artifact_metadata(
     return "\n".join(lines)
 
 
+def _template_values(node: GoalInstance, config: ResolvedConfig | None) -> dict[str, object]:
+    values = dict(node.params)
+    if config is not None:
+        for key in getattr(config, "values", {}):
+            values.setdefault(key, config.get(key))
+    return values
+
+
 def _display_path(path: Path, root: Path) -> str:
     try:
         return str(path.relative_to(root))
@@ -180,5 +243,7 @@ __all__ = [
     "artifact_dir",
     "artifacts_root",
     "read_artifact_status",
+    "resolve_artifact_inputs",
+    "resolve_artifact_outputs",
     "write_artifact_metadata",
 ]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import io
+import json
 import os
 import shutil
 import sys
@@ -106,17 +107,16 @@ class GraphRunTests(unittest.TestCase):
         self.assertIn("failed:    0", rendered)
 
     def test_run_plan_still_executes_when_artifact_metadata_exists(self):
-        from tools.gpgpu.artifacts import artifact_dir
+        from tools.gpgpu.artifacts import artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs
 
         config = self.config()
         initial = Planner(config, repo_root=ROOT).plan("sw.program.native")
         out_dir = artifact_dir(ROOT, initial.root)
         out_dir.mkdir(parents=True, exist_ok=True)
-        output = out_dir / "native.artifact"
-        output.write_text("native output\n", encoding="utf-8")
-        input_path = ROOT / "sw" / "programs" / self.program / "nbody.c"
-        output_hash = hashlib.sha256(output.read_bytes()).hexdigest()
-        input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
+        outputs = resolve_artifact_outputs(out_dir, initial.root, config)
+        for output in outputs:
+            output.write_text("native output\n", encoding="utf-8")
+        input_paths = resolve_artifact_inputs(ROOT, initial.root, config)
         (out_dir / "artifact.toml").write_text(
             "\n".join(
                 [
@@ -124,13 +124,19 @@ class GraphRunTests(unittest.TestCase):
                     f'identity = "{initial.root.identity}"',
                     "",
                     "[produced]",
-                    'files = ["native.artifact"]',
+                    "files = [" + ", ".join(json.dumps(path.relative_to(out_dir).as_posix()) for path in outputs) + "]",
                     "",
                     "[output_hashes]",
-                    f'"native.artifact" = "sha256:{output_hash}"',
+                    *[
+                        f'{json.dumps(path.relative_to(out_dir).as_posix())} = "sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"'
+                        for path in outputs
+                    ],
                     "",
                     "[input_hashes]",
-                    f'"sw/programs/{self.program}/nbody.c" = "sha256:{input_hash}"',
+                    *[
+                        f'{json.dumps(path.relative_to(ROOT).as_posix())} = "sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"'
+                        for path in input_paths
+                    ],
                     "",
                 ]
             ),

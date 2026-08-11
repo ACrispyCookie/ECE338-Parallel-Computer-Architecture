@@ -46,19 +46,23 @@ class PlannerFoundationTests(unittest.TestCase):
         return directory
 
     def write_validated_metadata(self, node):
+        from tools.gpgpu.artifacts import resolve_artifact_inputs, resolve_artifact_outputs
+
         directory = self.write_metadata(node)
-        output = directory / "validated.out"
-        output.write_text("validated output\n", encoding="utf-8")
-        input_path = ROOT / "sw" / "programs" / "nbody" / "nbody.c"
-        output_hash = hashlib.sha256(output.read_bytes()).hexdigest()
-        input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
+        outputs = resolve_artifact_outputs(directory, node)
+        input_paths = resolve_artifact_inputs(ROOT, node)
         with (directory / "artifact.toml").open("a", encoding="utf-8") as handle:
             handle.write("[produced]\n")
-            handle.write('files = ["validated.out"]\n\n')
+            handle.write("files = [" + ", ".join(json.dumps(path.relative_to(directory).as_posix()) for path in outputs) + "]\n\n")
             handle.write("[output_hashes]\n")
-            handle.write(f'"validated.out" = "sha256:{output_hash}"\n\n')
-            handle.write("[input_hashes]\n")
-            handle.write(f'"sw/programs/nbody/nbody.c" = "sha256:{input_hash}"\n')
+            for output in outputs:
+                output.write_text(f"validated output for {output.name}\n", encoding="utf-8")
+                output_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+                handle.write(f'{json.dumps(output.relative_to(directory).as_posix())} = "sha256:{output_hash}"\n')
+            handle.write("\n[input_hashes]\n")
+            for input_path in input_paths:
+                input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
+                handle.write(f'{json.dumps(input_path.relative_to(ROOT).as_posix())} = "sha256:{input_hash}"\n')
         return directory
 
     def test_runtime_options_do_not_change_native_program_identity(self):
@@ -99,6 +103,11 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertEqual(config.get("program.optimization"), "O2")
         self.assertIn("profiles/zed-demo.toml:profile", config.provenance_for("program.optimization").source)
 
+    def test_schema_is_loaded_from_declarative_toml(self):
+        schema_path = ROOT / "config" / "gpgpu" / "schema.toml"
+        self.assertTrue(schema_path.exists())
+        self.assertNotIn("SCHEMA: dict[str, SettingSpec] = {", (ROOT / "tools" / "gpgpu" / "config.py").read_text())
+
     def test_manifest_selectors_are_declared_in_schema(self):
         manifest_selectors = {
             key: spec.manifest_dir
@@ -114,6 +123,47 @@ class PlannerFoundationTests(unittest.TestCase):
                 "demo": "demos",
             },
         )
+
+    def test_schema_rejects_invalid_enum_without_choices(self):
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_schema_enum_without_choices"
+        with self.assertRaisesRegex(ConfigError, "enum setting .* choices"):
+            ConfigResolver(config_root=fixture)
+
+    def test_schema_rejects_unknown_schema_field(self):
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_schema_unknown_field"
+        with self.assertRaisesRegex(ConfigError, "Unknown schema field"):
+            ConfigResolver(config_root=fixture)
+
+    def test_goals_are_loaded_from_declarative_toml(self):
+        from tools.gpgpu.goals import GOALS
+
+        goals_path = ROOT / "config" / "gpgpu" / "goals.toml"
+        self.assertTrue(goals_path.exists())
+        self.assertNotIn("GOALS: dict[str, GoalDefinition] = {", (ROOT / "tools" / "gpgpu" / "goals.py").read_text())
+        self.assertEqual(len(GOALS), 13)
+
+    def test_goal_loader_rejects_unknown_dependency(self):
+        from tools.gpgpu.goals import GoalConfigError, load_goals
+
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_dependency" / "goals.toml"
+        with self.assertRaisesRegex(GoalConfigError, "Unknown dependency goal"):
+            load_goals(fixture, schema=ConfigResolver.SCHEMA)
+
+    def test_goal_loader_rejects_unknown_parameter_setting(self):
+        from tools.gpgpu.goals import GoalConfigError, load_goals
+
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_param" / "goals.toml"
+        with self.assertRaisesRegex(GoalConfigError, "Unknown setting referenced"):
+            load_goals(fixture, schema=ConfigResolver.SCHEMA)
+
+    def test_sw_program_image_expected_outputs_match_current_adapter(self):
+        from tools.gpgpu.goals import GOALS
+
+        self.assertEqual(
+            GOALS["sw.program.image"].expected_outputs,
+            ("instruction-memory image artifact", "objdump artifact"),
+        )
+        self.assertNotIn("data-memory image artifact", GOALS["sw.program.image"].expected_outputs)
 
     def test_cli_selection_override_reloads_selected_program_manifest_defaults(self):
         config = ConfigResolver().resolve(set_values=["program=nbody"])

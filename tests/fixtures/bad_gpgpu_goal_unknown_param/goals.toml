@@ -1,0 +1,5 @@
+[goals."sw.program.elf"]
+kind = "artifact"
+public = true
+description = "bad"
+artifact_params = ["missing.setting"]

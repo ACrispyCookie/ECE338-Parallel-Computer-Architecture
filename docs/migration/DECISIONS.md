@@ -216,3 +216,15 @@ Accepted Milestone 20 direction:
 - CLI selection overrides for manifest-selecting settings are applied before selected manifests so `--set program=nbody` loads `config/gpgpu/programs/nbody.toml`; all CLI overrides are then applied again at final precedence.
 - Explicit setting overrides still win at final precedence, e.g. `--set program=nbody --set program.optimization=O3` yields `O3` from `CLI --set`.
 - Direct single-goal `Executor.run()` is removed; graph execution through `Executor.run_plan()` is the supported execution path.
+
+## Declarative schema, goals, and artifact specs
+
+Accepted Milestone 21 direction:
+
+- Substantial control-plane definitions belong in declarative project data rather than embedded Python tables.
+- `config/gpgpu/schema.toml` owns setting definitions, including enum choices and manifest-selection metadata.
+- `config/gpgpu/goals.toml` owns goal definitions, dependencies, conditional notes, and artifact input/output specs.
+- Python owns typed dataclasses, TOML loading, validation, planning, execution, and artifact/cache algorithms.
+- Artifact validation compares recorded metadata against the current declarative input/output spec before trusting hashes.
+- `Executor._input_paths_for()` is removed; software input selection is no longer hardcoded in the executor.
+- `sw.program.image` expected outputs describe current adapter reality: instruction-memory image and objdump artifact.

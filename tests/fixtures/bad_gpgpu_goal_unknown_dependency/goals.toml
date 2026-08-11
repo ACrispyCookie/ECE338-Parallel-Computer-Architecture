@@ -1,0 +1,9 @@
+[goals."sw.program.elf"]
+kind = "artifact"
+public = true
+description = "bad"
+artifact_params = ["program"]
+
+[[goals."sw.program.elf".dependencies]]
+role = "missing"
+goal = "missing.goal"

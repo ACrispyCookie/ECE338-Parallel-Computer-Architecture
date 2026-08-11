@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ class SettingSpec:
     type_name: str
     default: Any
     scope: str
+    choices: tuple[str, ...] = ()
     manifest_dir: str | None = None
 
 
@@ -40,43 +42,99 @@ class ResolvedConfig:
         return self.provenance[key]
 
     def normalized_items(self) -> tuple[tuple[str, Any, str], ...]:
-        return tuple(
-            (key, self.values[key], self.provenance[key].source)
-            for key in sorted(self.values)
+        return tuple((key, self.values[key], self.provenance[key].source) for key in sorted(self.values))
+
+
+def _default_repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def load_schema(path: str | Path) -> dict[str, SettingSpec]:
+    schema_path = Path(path)
+    try:
+        with schema_path.open("rb") as handle:
+            data = tomllib.load(handle)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"Invalid TOML in {schema_path}: {exc}") from exc
+    settings = data.get("settings")
+    if not isinstance(settings, dict) or not settings:
+        raise ConfigError(f"{schema_path}: missing [settings] table")
+
+    allowed_fields = {"type", "choices", "default", "scope", "manifest_dir"}
+    valid_scopes = {"shared", "artifact", "runtime", "machine-local", "executor"}
+    valid_types = {"str", "int", "enum"}
+    loaded: dict[str, SettingSpec] = {}
+    for key, entry in settings.items():
+        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", key):
+            raise ConfigError(f"Invalid setting name: {key!r}")
+        if not isinstance(entry, dict):
+            raise ConfigError(f"Schema setting {key} must be a table")
+        unknown = set(entry) - allowed_fields
+        if unknown:
+            raise ConfigError(f"Unknown schema field for {key}: {sorted(unknown)[0]}")
+        for required in ("type", "default", "scope"):
+            if required not in entry:
+                raise ConfigError(f"Schema setting {key} missing {required}")
+        type_name = entry["type"]
+        if type_name not in valid_types:
+            raise ConfigError(f"Invalid schema type for {key}: {type_name!r}")
+        scope = entry["scope"]
+        if scope not in valid_scopes:
+            raise ConfigError(f"Invalid schema scope for {key}: {scope!r}")
+        choices: tuple[str, ...] = ()
+        if type_name == "enum":
+            raw_choices = entry.get("choices")
+            if not isinstance(raw_choices, list) or not raw_choices or not all(isinstance(choice, str) for choice in raw_choices):
+                raise ConfigError(f"enum setting {key} requires string choices")
+            choices = tuple(raw_choices)
+        elif "choices" in entry:
+            raise ConfigError(f"choices are only valid for enum setting {key}")
+        manifest_dir = entry.get("manifest_dir")
+        if manifest_dir is not None:
+            if type_name != "str":
+                raise ConfigError(f"manifest_dir is only valid for string setting {key}")
+            if not isinstance(manifest_dir, str) or not re.fullmatch(r"[A-Za-z0-9_/-]+", manifest_dir):
+                raise ConfigError(f"Invalid manifest_dir for {key}: {manifest_dir!r}")
+        spec = SettingSpec(
+            key=key,
+            type_name=type_name,
+            default=entry["default"],
+            scope=scope,
+            choices=choices,
+            manifest_dir=manifest_dir,
         )
+        _coerce_value(spec, spec.default)
+        loaded[key] = spec
+    return loaded
+
+
+def _coerce_value(spec: SettingSpec, raw_value: Any) -> Any:
+    if spec.type_name == "int":
+        if isinstance(raw_value, int) and not isinstance(raw_value, bool):
+            return raw_value
+        try:
+            return int(str(raw_value), 0)
+        except ValueError as exc:
+            raise ConfigError(f"Setting {spec.key} expected integer, got {raw_value!r}") from exc
+
+    if spec.type_name == "str":
+        if raw_value is None:
+            raise ConfigError(f"Setting {spec.key} expected string, got None")
+        return str(raw_value)
+
+    if spec.type_name == "enum":
+        value = str(raw_value)
+        if value not in spec.choices:
+            raise ConfigError(f"Setting {spec.key} expected one of {', '.join(spec.choices)}, got {value!r}")
+        return value
+
+    raise ConfigError(f"Unsupported setting type for {spec.key}: {spec.type_name}")
 
 
 class ConfigResolver:
     """Resolve typed GPGPU planner configuration from TOML manifests."""
 
-    SCHEMA: dict[str, SettingSpec] = {
-        "architecture": SettingSpec("architecture", "str", "gpgpu32", "shared", manifest_dir="architectures"),
-        "board_type": SettingSpec("board_type", "str", "zynq7000-zedboard", "shared", manifest_dir="board_types"),
-        "board": SettingSpec("board", "str", "zedboard", "machine-local"),
-        "program": SettingSpec("program", "str", "nbody", "shared", manifest_dir="programs"),
-        "demo": SettingSpec("demo", "str", "nbody", "shared", manifest_dir="demos"),
-        "backend": SettingSpec("backend", "enum:fake,fpga-uart", "fake", "runtime"),
-        "toolchain": SettingSpec("toolchain", "str", "riscv-gcc-rv32im-ilp32", "shared"),
-        "program.optimization": SettingSpec("program.optimization", "enum:O0,O1,O2,O3", "O2", "artifact"),
-        "program.march": SettingSpec("program.march", "str", "rv32im", "artifact"),
-        "program.mabi": SettingSpec("program.mabi", "str", "ilp32", "artifact"),
-        "rtl.sp_per_sm": SettingSpec("rtl.sp_per_sm", "int", 32, "artifact"),
-        "rtl.imem_words": SettingSpec("rtl.imem_words", "int", 2048, "artifact"),
-        "rtl.dmem_words": SettingSpec("rtl.dmem_words", "int", 2048, "artifact"),
-        "fpga.synth.strategy": SettingSpec("fpga.synth.strategy", "str", "default", "artifact"),
-        "fpga.part": SettingSpec("fpga.part", "str", "xc7z020clg484-1", "artifact"),
-        "board.configure_policy": SettingSpec("board.configure_policy", "enum:if-needed,always,never", "if-needed", "runtime"),
-        "kernel.load_policy": SettingSpec("kernel.load_policy", "enum:if-needed,always,never", "if-needed", "runtime"),
-        "kernel.kernel_calls": SettingSpec("kernel.kernel_calls", "int", 1, "runtime"),
-        "demo.fps": SettingSpec("demo.fps", "int", 12, "runtime"),
-        "demo.dataset": SettingSpec("demo.dataset", "str", "default", "runtime"),
-        "demo.steps_per_frame": SettingSpec("demo.steps_per_frame", "int", 1, "runtime"),
-        "demo.http_host": SettingSpec("demo.http_host", "str", "0.0.0.0", "runtime"),
-        "demo.http_port": SettingSpec("demo.http_port", "int", 8765, "runtime"),
-        "board.port": SettingSpec("board.port", "str", "/dev/ttyACM0", "machine-local"),
-        "uart.baud": SettingSpec("uart.baud", "int", 115200, "machine-local"),
-        "executor.verbosity": SettingSpec("executor.verbosity", "int", 0, "executor"),
-    }
+    SCHEMA = load_schema(_default_repo_root() / "config" / "gpgpu" / "schema.toml")
 
     GOAL_DEFAULTS: dict[str, Any] = {
         "backend": "fake",
@@ -88,9 +146,11 @@ class ConfigResolver:
     }
 
     def __init__(self, config_root: str | Path | None = None):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = _default_repo_root()
         self.repo_root = repo_root
         self.config_root = Path(config_root) if config_root is not None else repo_root / "config" / "gpgpu"
+        schema_path = self.config_root / "schema.toml"
+        self.schema = load_schema(schema_path) if schema_path.exists() else self.SCHEMA
 
     def resolve(
         self,
@@ -103,7 +163,7 @@ class ConfigResolver:
 
         cli_overrides = tuple(self._parse_set(item) for item in (set_values or []))
 
-        for key, spec in self.SCHEMA.items():
+        for key, spec in self.schema.items():
             self._assign(values, provenance, key, spec.default, "schema default")
 
         self._apply_defaults_file(values, provenance, self.config_root / "defaults.toml", "defaults")
@@ -154,12 +214,12 @@ class ConfigResolver:
     ) -> None:
         for key, raw_value in cli_overrides:
             normalized = self._normalize_key(key)
-            spec = self.SCHEMA.get(normalized)
+            spec = self.schema.get(normalized)
             if spec is not None and spec.manifest_dir is not None:
                 self._assign(values, provenance, normalized, raw_value, "CLI --set selection")
 
     def _apply_selected_manifests(self, values: dict[str, Any], provenance: dict[str, Provenance]) -> None:
-        for key, spec in self.SCHEMA.items():
+        for key, spec in self.schema.items():
             if spec.manifest_dir is not None:
                 self._apply_selected_manifest(values, provenance, key, spec.manifest_dir)
 
@@ -261,32 +321,10 @@ class ConfigResolver:
         raw_value: Any,
         source: str,
     ) -> None:
-        if key not in self.SCHEMA:
+        if key not in self.schema:
             raise ConfigError(f"Unknown setting: {key}")
-        values[key] = self._coerce(self.SCHEMA[key], raw_value)
+        values[key] = self._coerce(self.schema[key], raw_value)
         provenance[key] = Provenance(source=source)
 
     def _coerce(self, spec: SettingSpec, raw_value: Any) -> Any:
-        if spec.type_name == "int":
-            if isinstance(raw_value, int) and not isinstance(raw_value, bool):
-                return raw_value
-            try:
-                return int(str(raw_value), 0)
-            except ValueError as exc:
-                raise ConfigError(f"Setting {spec.key} expected integer, got {raw_value!r}") from exc
-
-        if spec.type_name == "str":
-            if raw_value is None:
-                raise ConfigError(f"Setting {spec.key} expected string, got None")
-            return str(raw_value)
-
-        if spec.type_name.startswith("enum:"):
-            choices = spec.type_name.split(":", 1)[1].split(",")
-            value = str(raw_value)
-            if value not in choices:
-                raise ConfigError(
-                    f"Setting {spec.key} expected one of {', '.join(choices)}, got {value!r}"
-                )
-            return value
-
-        raise ConfigError(f"Unsupported setting type for {spec.key}: {spec.type_name}")
+        return _coerce_value(spec, raw_value)
