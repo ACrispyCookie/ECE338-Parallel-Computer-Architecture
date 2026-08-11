@@ -2,4 +2,4 @@
 kind = "artifact"
 public = true
 description = "bad"
-artifact_params = ["missing.setting"]
+params = ["missing.setting"]

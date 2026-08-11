@@ -2,7 +2,7 @@
 kind = "artifact"
 public = true
 description = "Build a native reference executable for a selected program."
-artifact_params = ["program", "program.optimization"]
+params = ["program", "program.optimization"]
 expected_outputs = ["native reference executable artifact"]
 
 [goals."sw.program.native".artifact]
@@ -20,7 +20,7 @@ type = "native-executable"
 kind = "artifact"
 public = true
 description = "Build a RISC-V ELF for the selected GPGPU program."
-artifact_params = ["program", "architecture", "program.optimization", "program.march", "program.mabi"]
+params = ["program", "architecture", "program.optimization", "program.march", "program.mabi"]
 expected_outputs = ["RISC-V ELF artifact"]
 
 [goals."sw.program.elf".artifact]
@@ -45,7 +45,7 @@ type = "linker-map"
 kind = "artifact"
 public = true
 description = "Build an instruction-memory image for the selected program."
-artifact_params = ["program", "architecture", "program.optimization", "program.march", "program.mabi"]
+params = ["program", "architecture", "program.optimization", "program.march", "program.mabi"]
 expected_outputs = ["instruction-memory image artifact", "objdump artifact"]
 
 [goals."sw.program.image".artifact]
@@ -74,14 +74,14 @@ goal = "sw.program.elf"
 kind = "artifact"
 public = false
 description = "Internal mock Vivado project artifact."
-artifact_params = ["architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part"]
+params = ["architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part"]
 expected_outputs = ["board project artifact"]
 
 [goals."hw.board.bitstream"]
 kind = "artifact"
 public = true
 description = "Build a programmable-logic bitstream."
-artifact_params = ["architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"]
+params = ["architecture", "board_type", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words", "fpga.part", "fpga.synth.strategy"]
 expected_outputs = ["bitstream artifact"]
 
 [[goals."hw.board.bitstream".dependencies]]
@@ -92,7 +92,7 @@ goal = "hw.board.project"
 kind = "action"
 public = true
 description = "Configure the selected board with a compatible bitstream."
-runtime_params = ["board", "board.configure_policy", "board.port"]
+params = ["board", "board.configure_policy", "board.port"]
 side_effects = ["configure selected board FPGA fabric"]
 
 [[goals."hw.board.program".dependencies]]
@@ -103,7 +103,7 @@ goal = "hw.board.bitstream"
 kind = "action"
 public = true
 description = "Load a GPGPU program image and initial data into hardware."
-runtime_params = ["board", "kernel.load_policy", "uart.baud"]
+params = ["board", "kernel.load_policy", "uart.baud"]
 side_effects = ["load selected program image into board memory"]
 
 [[goals."hw.board.kernel.load".dependencies]]
@@ -118,7 +118,7 @@ goal = "sw.program.image"
 kind = "action"
 public = true
 description = "Run a loaded GPGPU kernel through the current transport."
-runtime_params = ["board", "kernel.kernel_calls"]
+params = ["board", "kernel.kernel_calls"]
 side_effects = ["run loaded kernel on selected board"]
 
 [[goals."hw.board.kernel.run".dependencies]]
@@ -129,7 +129,7 @@ goal = "hw.board.kernel.load"
 kind = "service"
 public = true
 description = "Run the selected interactive demo service."
-runtime_params = ["demo", "backend", "demo.fps", "demo.dataset", "demo.steps_per_frame", "demo.http_host", "demo.http_port"]
+params = ["demo", "backend", "demo.fps", "demo.dataset", "demo.steps_per_frame", "demo.http_host", "demo.http_port"]
 lifecycle = "long-running"
 side_effects = ["start selected interactive demo service"]
 
@@ -162,7 +162,7 @@ backend = "fake"
 kind = "check"
 public = true
 description = "Run the RTL simulation test suite."
-artifact_params = ["architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"]
+params = ["architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"]
 expected_outputs = ["RTL check result"]
 
 [[goals."test.rtl".dependencies]]
@@ -177,7 +177,7 @@ goal = "hw.rtl.sim_executable"
 kind = "check"
 public = true
 description = "Compare a native program run against generated program artifacts."
-artifact_params = ["program", "architecture", "program.optimization"]
+params = ["program", "architecture", "program.optimization"]
 expected_outputs = ["program comparison check result"]
 
 [[goals."test.program".dependencies]]
@@ -192,12 +192,12 @@ goal = "sw.program.image"
 kind = "artifact"
 public = false
 description = "Internal assembly fixture generation."
-artifact_params = ["architecture", "rtl.imem_words", "rtl.dmem_words"]
+params = ["architecture", "rtl.imem_words", "rtl.dmem_words"]
 expected_outputs = ["RTL assembly fixture artifact"]
 
 [goals."hw.rtl.sim_executable"]
 kind = "artifact"
 public = false
 description = "Internal Icarus simulation executable."
-artifact_params = ["architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"]
+params = ["architecture", "rtl.sp_per_sm", "rtl.imem_words", "rtl.dmem_words"]
 expected_outputs = ["RTL simulation executable artifact"]

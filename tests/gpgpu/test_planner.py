@@ -280,19 +280,50 @@ class PlannerFoundationTests(unittest.TestCase):
         plan = self.make_planner().plan("sw.program.elf")
         self.assertEqual([node.goal_id for node in plan.nodes], ["sw.program.elf"])
 
+    def test_goal_instance_params_are_declared_without_artifact_or_runtime_param_fields(self):
+        from tools.gpgpu.goals import GOALS
+
+        source = (ROOT / "config" / "gpgpu" / "goals.toml").read_text()
+        self.assertNotIn("artifact_params", source)
+        self.assertNotIn("runtime_params", source)
+        self.assertEqual(
+            GOALS["sw.program.elf"].params,
+            ("program", "architecture", "program.optimization", "program.march", "program.mabi"),
+        )
+        self.assertEqual(
+            GOALS["test.program"].params,
+            ("program", "architecture", "program.optimization"),
+        )
+
     def test_goal_parameter_scopes_are_consistent_with_schema(self):
         from tools.gpgpu.config import ConfigResolver
         from tools.gpgpu.goals import GOALS
 
         for goal in GOALS.values():
-            for name in goal.artifact_params:
-                self.assertIn(ConfigResolver.SCHEMA[name].scope, {"artifact", "shared"}, f"{goal.goal_id}:{name}")
-            for name in goal.runtime_params:
+            for name in goal.params:
                 self.assertIn(
                     ConfigResolver.SCHEMA[name].scope,
-                    {"runtime", "machine-local", "shared"},
+                    {"artifact", "shared", "runtime", "machine-local"},
                     f"{goal.goal_id}:{name}",
                 )
+
+    def test_check_goal_uses_declared_instance_params_in_plan(self):
+        plan = self.make_planner("program=nbody", "program.optimization=O3").plan("test.program")
+        node = plan.require_instance("test.program")
+
+        self.assertEqual(node.kind, "check")
+        self.assertFalse(node.cacheable)
+        self.assertIn(("program", "nbody"), node.params)
+        self.assertIn(("architecture", "gpgpu32"), node.params)
+        self.assertIn(("program.optimization", "O3"), node.params)
+        self.assertNotIn("CACHE", next(line for line in plan.format_plan().splitlines() if "test.program" in line))
+
+    def test_action_and_service_goals_keep_declared_runtime_instance_params(self):
+        action = self.make_planner("board.configure_policy=always").plan("hw.board.program").root
+        service = self.make_planner("demo=nbody-3d", "backend=fake", "demo.fps=24").plan("demo.run").root
+
+        self.assertIn(("board.configure_policy", "always"), action.params)
+        self.assertIn(("demo.fps", 24), service.params)
 
     def test_no_fake_test_settings_are_added_yet(self):
         with self.assertRaisesRegex(ConfigError, "Unknown setting"):

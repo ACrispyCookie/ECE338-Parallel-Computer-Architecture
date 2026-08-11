@@ -243,3 +243,14 @@ Accepted Milestone 22 direction:
 - Dependency artifact consumption uses dependency role plus output role, for example `dependency_outputs["elf"]["elf"]`, rather than filename suffix guessing.
 - `sw.program.image` consumes the `sw.program.elf` dependency through its declared `elf` output of type `riscv-elf`.
 - Cache skipping remains deferred; `gpgpu run` still executes adapters even when planning reports `CACHE HIT`.
+
+## Goal instance parameter model
+
+Accepted Milestone 23 direction:
+
+- Goal definitions use one production-shaped `params` field for normalized goal-instance parameters across all goal kinds.
+- The old `artifact_params` and `runtime_params` goal fields are removed rather than kept as transitional aliases.
+- Artifact goals use `params` as the artifact-affecting parameter set for artifact identity.
+- Check, action, and service goals also use `params` so plan/explain output describes the normalized operation deterministically.
+- Cache status remains limited to artifact goals; check/action/service goals must not show compact `CACHE HIT`/`CACHE MISS` output.
+- Runtime-vs-artifact-vs-machine-local semantics remain defined by the central setting schema scopes, not by separate per-goal field names.

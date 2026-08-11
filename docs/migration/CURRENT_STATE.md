@@ -15,18 +15,18 @@ The repository now has a working typed goal planner, config resolver, graph exec
 
 The foundation is useful, but it is not yet a complete build system for the original project mission. Most hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only.
 
-Most important cleanup findings after Milestone 22:
+Most important cleanup findings after Milestone 23:
 
-1. Check-goal parameter modeling is likely wrong: non-artifact check goals currently ignore `artifact_params` during planning.
-2. Dependency identities are still recorded in metadata by goal id, which will not handle multiple instances of the same goal.
-4. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
-5. Configuration schema now lives in `config/gpgpu/schema.toml`; Python loads and validates it.
-6. Goal/dependency/artifact definitions now live in `config/gpgpu/goals.toml`; Python loads and validates them.
-7. Artifact cache validation now compares current declarative input/output specs against recorded metadata, so newly added matching source files invalidate old artifacts.
-8. CLI selection settings are schema-declared manifest selectors and CLI passes one repo root into planner, executor, and cleaner.
-9. Software adapters now fail if `make` returns success but a declared output is missing.
-10. Dependency artifacts are now consumed by dependency role and output role, not filename suffix scans.
-11. Some migration docs still mix historical and current status; `CURRENT_STATE.md` remains the current branch map.
+1. Dependency identities are still recorded in metadata by goal id, which will not handle multiple instances of the same goal.
+2. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
+3. Configuration schema now lives in `config/gpgpu/schema.toml`; Python loads and validates it.
+4. Goal/dependency/artifact definitions now live in `config/gpgpu/goals.toml`; Python loads and validates them.
+5. Artifact cache validation now compares current declarative input/output specs against recorded metadata, so newly added matching source files invalidate old artifacts.
+6. CLI selection settings are schema-declared manifest selectors and CLI passes one repo root into planner, executor, and cleaner.
+7. Software adapters now fail if `make` returns success but a declared output is missing.
+8. Dependency artifacts are now consumed by dependency role and output role, not filename suffix scans.
+9. Goal definitions now use one production-shaped `params` field for every goal kind; check/action/service parameters are planned deterministically without artifact-only naming.
+10. Some migration docs still mix historical and current status; `CURRENT_STATE.md` remains the current branch map.
 
 ## Current goal coverage
 
@@ -132,7 +132,7 @@ Current issues:
 - `hw.board.project` is still explicitly mock-only.
 - `sw.program.image` now declares current adapter reality: instruction-memory image plus objdump artifact, not a fake data-memory artifact.
 - Artifact outputs use a minimal typed contract: role, path template, and semantic type string.
-- `test.rtl` and `test.program` declare `artifact_params`, but current planner logic ignores those params for check goals.
+- All goal kinds declare one `params` tuple for normalized goal-instance parameters; artifact-only `artifact_params` and action/service-only `runtime_params` fields are no longer part of the goal schema.
 
 ### `tools/gpgpu/config.py`
 
@@ -534,7 +534,7 @@ Current limitation:
 
 | Location | Issue | Why it matters | Recommended cleanup |
 |---|---|---|---|
-| `Planner._params_for()` | Check goals ignore `artifact_params`. | `test.rtl`/`test.program` identities and output omit important params. | Redesign per-goal param roles. |
+| Metadata dependency identities | Dependency identities are still keyed by goal id in `artifact.toml`. | Multiple instances of the same dependency goal would collide in metadata. | Move metadata dependency identity keys to dependency role or stable edge key before multi-instance graphs. |
 | `GoalDefinition.implementation_version` | Default `"mock-v1"`. | Real adapters now use mock identity version. | Assign explicit implementation versions per goal/adapter. |
 | `artifacts.py` input validation | Validates recorded inputs only. | Newly added inputs may not invalidate old artifacts. | Compare against declarative current input specs. |
 | `artifacts.py` dependency metadata | Keyed by goal id. | Cannot represent two instances of same goal. | Store role/edge/instance identities. |

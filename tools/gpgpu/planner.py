@@ -212,8 +212,7 @@ class Planner:
         return instance
 
     def _params_for(self, definition: GoalDefinition) -> tuple[tuple[str, object], ...]:
-        names = definition.artifact_params if definition.kind == "artifact" else definition.runtime_params
-        return tuple((name, self.config.get(name)) for name in names)
+        return tuple((name, self.config.get(name)) for name in definition.params)
 
     def _dependency_entries(self, goal_id: str):
         definition = GOALS[goal_id]

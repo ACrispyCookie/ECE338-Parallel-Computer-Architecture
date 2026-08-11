@@ -2,7 +2,7 @@
 kind = "artifact"
 public = true
 description = "bad"
-artifact_params = ["program"]
+params = ["program"]
 
 [goals."sw.program.elf".artifact]
 input_globs = ["sw/programs/{missing}/*.c"]

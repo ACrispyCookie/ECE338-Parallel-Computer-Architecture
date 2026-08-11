@@ -53,8 +53,7 @@ class GoalDefinition:
     kind: GoalKind
     public: bool
     description: str
-    artifact_params: tuple[str, ...] = ()
-    runtime_params: tuple[str, ...] = ()
+    params: tuple[str, ...] = ()
     implementation_version: str = "mock-v1"
     lifecycle: str | None = None
     expected_outputs: tuple[str, ...] = ()
@@ -99,8 +98,7 @@ def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]
         "kind",
         "public",
         "description",
-        "artifact_params",
-        "runtime_params",
+        "params",
         "implementation_version",
         "lifecycle",
         "expected_outputs",
@@ -128,8 +126,7 @@ def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]
     if lifecycle is not None and (kind != "service" or not isinstance(lifecycle, str)):
         raise GoalConfigError(f"Goal {goal_id} lifecycle is only valid for service goals")
 
-    artifact_params = _string_tuple(entry.get("artifact_params", ()), f"Goal {goal_id} artifact_params")
-    runtime_params = _string_tuple(entry.get("runtime_params", ()), f"Goal {goal_id} runtime_params")
+    params = _string_tuple(entry.get("params", ()), f"Goal {goal_id} params")
     expected_outputs = _string_tuple(entry.get("expected_outputs", ()), f"Goal {goal_id} expected_outputs")
     side_effects = _string_tuple(entry.get("side_effects", ()), f"Goal {goal_id} side_effects")
     implementation_version = entry.get("implementation_version", "mock-v1")
@@ -142,8 +139,7 @@ def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]
         kind=kind,
         public=public,
         description=description,
-        artifact_params=artifact_params,
-        runtime_params=runtime_params,
+        params=params,
         implementation_version=implementation_version,
         lifecycle=lifecycle,
         expected_outputs=expected_outputs,
@@ -258,7 +254,7 @@ def _load_artifact_outputs(
 
 def _validate_goal_references(goals: Mapping[str, GoalDefinition], *, schema: Mapping[str, SettingSpec]) -> None:
     for goal in goals.values():
-        for param in (*goal.artifact_params, *goal.runtime_params):
+        for param in goal.params:
             if param not in schema:
                 raise GoalConfigError(f"Unknown setting referenced by {goal.goal_id}: {param}")
         for dependency in goal.dependencies:

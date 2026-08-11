@@ -600,6 +600,38 @@ Expected evidence:
 - full test discovery passes;
 - smoke run/plan/clean cycle still works.
 
+### Milestone 23: production goal-instance parameter model
+
+Objective: replace artifact-only goal parameter terminology with one production-shaped `params` field used by every goal kind.
+
+Scope:
+
+- rename declarative goal fields from `artifact_params`/`runtime_params` to `params`;
+- remove the old fields rather than keeping compatibility aliases;
+- simplify `GoalDefinition` to one `params` tuple;
+- make the planner instantiate every goal kind from `definition.params`;
+- keep artifact identity behavior unchanged for artifact goals;
+- make check/action/service plan output include declared normalized params;
+- keep cache status limited to artifact goals.
+
+Non-goals:
+
+- no cache skipping;
+- no new adapters;
+- no check-result artifact store;
+- no hardware-state probing;
+- no new setting scopes;
+- no legacy script deletion.
+
+Expected evidence:
+
+- tests prove `config/gpgpu/goals.toml` no longer contains `artifact_params` or `runtime_params`;
+- tests prove `test.program` includes `program`, `architecture`, and `program.optimization` in its planned instance;
+- tests prove action/service params still appear in planned instances;
+- tests prove non-artifact goals still do not show compact cache status;
+- full test discovery passes;
+- smoke plan commands show the new parameter model.
+
 ## Dependency execution policy
 
 Dependencies are declared in `config/gpgpu/goals.toml` and loaded into typed `GoalDefinition.dependencies` records by `tools/gpgpu/goals.py`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
@@ -710,12 +742,11 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-After Milestone 22, remaining cleanup should continue toward final cache-safe goals:
+After Milestone 23, remaining cleanup should continue toward final cache-safe goals:
 
-1. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
-2. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
-3. Cache execution policy: define and test when artifact goals may be skipped, while action/check/service goals remain explicit.
-4. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
+1. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
+2. Cache execution policy: define and test when artifact goals may be skipped, while action/check/service goals remain explicit.
+3. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
 
 ## Rollback
 
