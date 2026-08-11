@@ -1,6 +1,6 @@
-# Current Control-Plane State — Milestone 19
+# Current Control-Plane State — Milestone 22
 
-This document reevaluates the current `gpgpu` control-plane implementation after Milestone 18. It intentionally analyzes the implementation source files and migration records, not the test suite.
+This document reevaluates the current `gpgpu` control-plane implementation after Milestone 22. It intentionally analyzes the implementation source files and migration records, not the test suite.
 
 ## Baseline and branch context
 
@@ -11,21 +11,22 @@ This document reevaluates the current `gpgpu` control-plane implementation after
 
 ## Executive summary
 
-The repository now has a working typed goal planner, config resolver, graph executor, progress reporters, artifact layout/metadata helpers, conservative artifact cleaner, and validated cache-status reporting. The only executable adapters are still the software-program artifact adapters around the existing `sw/programs/Makefile`.
+The repository now has a working typed goal planner, config resolver, graph executor, progress reporters, artifact layout/metadata helpers, conservative artifact cleaner, validated cache-status reporting, declarative goal/artifact specs, and strict typed artifact output contracts. The only executable adapters are still the software-program artifact adapters around the existing `sw/programs/Makefile`.
 
 The foundation is useful, but it is not yet a complete build system for the original project mission. Most hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only.
 
-Most important cleanup findings after Milestone 21:
+Most important cleanup findings after Milestone 22:
 
 1. Check-goal parameter modeling is likely wrong: non-artifact check goals currently ignore `artifact_params` during planning.
-2. Software adapters do not fail if `make` returns success but required outputs are missing.
-3. Dependency identities are keyed by goal id, which will not handle multiple instances of the same goal.
+2. Dependency identities are still recorded in metadata by goal id, which will not handle multiple instances of the same goal.
 4. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
 5. Configuration schema now lives in `config/gpgpu/schema.toml`; Python loads and validates it.
 6. Goal/dependency/artifact definitions now live in `config/gpgpu/goals.toml`; Python loads and validates them.
 7. Artifact cache validation now compares current declarative input/output specs against recorded metadata, so newly added matching source files invalidate old artifacts.
 8. CLI selection settings are schema-declared manifest selectors and CLI passes one repo root into planner, executor, and cleaner.
-9. Some migration docs still mix historical and current status; `CURRENT_STATE.md` remains the current branch map.
+9. Software adapters now fail if `make` returns success but a declared output is missing.
+10. Dependency artifacts are now consumed by dependency role and output role, not filename suffix scans.
+11. Some migration docs still mix historical and current status; `CURRENT_STATE.md` remains the current branch map.
 
 ## Current goal coverage
 
@@ -117,7 +118,7 @@ Responsibilities:
   - `GoalNote`
   - `GoalDefinition`
 - Defines the central `GOALS` registry.
-- Records goal kind, visibility, description, param names, implementation version, lifecycle, expected outputs, side effects, declarative dependencies, and conditional notes.
+- Records goal kind, visibility, description, param names, implementation version, lifecycle, artifact input/output specs, side effects, declarative dependencies, and conditional notes.
 
 Justification:
 
@@ -130,6 +131,7 @@ Current issues:
 - `implementation_version` defaults to `"mock-v1"`, which is stale for real software adapters.
 - `hw.board.project` is still explicitly mock-only.
 - `sw.program.image` now declares current adapter reality: instruction-memory image plus objdump artifact, not a fake data-memory artifact.
+- Artifact outputs use a minimal typed contract: role, path template, and semantic type string.
 - `test.rtl` and `test.program` declare `artifact_params`, but current planner logic ignores those params for check goals.
 
 ### `tools/gpgpu/config.py`
@@ -220,7 +222,7 @@ Current issues:
 
 - Validation now compares recorded input/output metadata against current declarative artifact specs before checking hashes.
 - `_dependency_identities(node)` uses a hidden `GoalInstance` attribute contract.
-- Dependencies are keyed by goal id, not by dependency role or stable edge id.
+- Metadata dependency identities are keyed by goal id, not by dependency role or stable edge id.
 - `write_artifact_metadata()` can infer repo root from `directory.parents[3]` if none is passed; this fallback is brittle.
 
 ### `tools/gpgpu/executor.py`
@@ -249,8 +251,9 @@ Current issues:
 
 - Artifact input selection is now delegated to declarative specs through `resolve_artifact_inputs()`.
 - `format_run_result()` and `format_run_summary()` overlap with `reporter.py` and may be legacy debug helpers.
-- Adapter success does not currently require all declared produced files to exist.
-- Direct dependency identities are keyed by goal id, not by dependency role/edge/instance.
+- Adapter success now requires all declared produced files to exist.
+- Direct dependency outputs are passed by dependency role and output role.
+- Direct dependency identities are still recorded in metadata by goal id, not by dependency role/edge/instance.
 
 ### `tools/gpgpu/adapters/sw_programs.py`
 
@@ -261,7 +264,7 @@ Responsibilities:
   - `run_elf()`
   - `run_image()`
 - Invokes `make -C sw/programs` with `PROG`, `OUT_DIR`, optional `ELF_IN`, and a named target.
-- Converts process output and produced files into `RunResult`.
+- Converts process output and declared produced artifacts into `RunResult`.
 
 Current commands:
 
@@ -278,8 +281,6 @@ Justification:
 
 Current issues:
 
-- `_dependency_artifact()` selects by filename suffix rather than typed artifact output.
-- Required output verification is weak.
 - Planner config flags are not passed to Makefile flags.
 
 ### `tools/gpgpu/adapters/__init__.py`

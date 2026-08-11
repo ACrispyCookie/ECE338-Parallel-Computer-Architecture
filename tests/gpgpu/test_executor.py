@@ -16,7 +16,8 @@ sys.path.insert(0, str(ROOT))
 
 from tools.gpgpu.cli import main
 from tools.gpgpu.config import ConfigResolver
-from tools.gpgpu.executor import Executor, RunResult, format_run_summary
+from tools.gpgpu.artifacts import artifact_dir
+from tools.gpgpu.executor import Executor, ProducedArtifact, RunResult, format_run_summary
 from tools.gpgpu.planner import Planner
 from tools.gpgpu.reporter import InteractiveRunReporter, PlainRunReporter
 
@@ -43,6 +44,12 @@ class ExecutorStructureTests(unittest.TestCase):
         self.assertNotIn('"out"', adapter_source)
         self.assertNotIn('"artifacts"', adapter_source)
         self.assertNotIn("_artifact_dir", adapter_source)
+
+    def test_program_adapters_do_not_guess_dependency_artifacts_by_suffix(self):
+        adapter_source = (ROOT / "tools" / "gpgpu" / "adapters" / "sw_programs.py").read_text()
+
+        self.assertNotIn("suffix=", adapter_source)
+        self.assertNotIn("endswith", adapter_source)
 
     def test_artifact_dir_helper_uses_goal_and_identity_without_program_component(self):
         from tools.gpgpu.artifacts import artifact_dir
@@ -76,11 +83,13 @@ class GraphRunTests(unittest.TestCase):
         def record(name: str):
             def adapter(context):
                 calls.append(context.goal_id)
+                for output in context.declared_outputs.values():
+                    output.path.write_text(f"{name}\n", encoding="utf-8")
                 return RunResult(
                     goal_id=context.goal_id,
                     command=("fake", name),
                     returncode=0,
-                    produced=(context.artifact_dir / f"{name}.artifact",),
+                    produced=tuple(context.declared_outputs.values()),
                 )
             return adapter
 
@@ -106,6 +115,54 @@ class GraphRunTests(unittest.TestCase):
         self.assertIn("skipped:   0", rendered)
         self.assertIn("failed:    0", rendered)
 
+    def test_successful_adapter_missing_declared_output_fails_goal(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.native")
+        shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.native", ignore_errors=True)
+
+        def native(context):
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+
+        summary = Executor(config, adapters={"sw.program.native": native}).run_plan(plan)
+
+        self.assertEqual(summary.returncode, 1)
+        self.assertEqual(summary.failed_count, 1)
+        rendered = format_run_summary(summary, repo_root=ROOT)
+        self.assertIn("FAILED    sw.program.native", rendered)
+        self.assertIn("declared output missing: executable -> nbody_x86", rendered)
+
+    def test_dependency_outputs_are_addressed_by_dependency_and_output_role(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.image")
+        seen_elf_path: list[Path] = []
+
+        def elf(context):
+            output = context.declared_outputs["elf"]
+            output.path.write_text("elf\n", encoding="utf-8")
+            context.declared_outputs["map"].path.write_text("map\n", encoding="utf-8")
+            return RunResult(
+                goal_id=context.goal_id,
+                command=("fake", "elf"),
+                returncode=0,
+                produced=tuple(context.declared_outputs.values()),
+            )
+
+        def image(context):
+            seen_elf_path.append(context.dependency_outputs["elf"]["elf"].path)
+            for output in context.declared_outputs.values():
+                output.path.write_text(f"{output.role}\n", encoding="utf-8")
+            return RunResult(
+                goal_id=context.goal_id,
+                command=("fake", "image"),
+                returncode=0,
+                produced=tuple(context.declared_outputs.values()),
+            )
+
+        summary = Executor(config, adapters={"sw.program.elf": elf, "sw.program.image": image}).run_plan(plan)
+
+        self.assertEqual(summary.returncode, 0)
+        self.assertEqual(seen_elf_path, [artifact_dir(ROOT, plan.nodes[0]) / "nbody.elf"])
+
     def test_run_plan_still_executes_when_artifact_metadata_exists(self):
         from tools.gpgpu.artifacts import artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs
 
@@ -115,7 +172,7 @@ class GraphRunTests(unittest.TestCase):
         out_dir.mkdir(parents=True, exist_ok=True)
         outputs = resolve_artifact_outputs(out_dir, initial.root, config)
         for output in outputs:
-            output.write_text("native output\n", encoding="utf-8")
+            output.path.write_text("native output\n", encoding="utf-8")
         input_paths = resolve_artifact_inputs(ROOT, initial.root, config)
         (out_dir / "artifact.toml").write_text(
             "\n".join(
@@ -124,12 +181,15 @@ class GraphRunTests(unittest.TestCase):
                     f'identity = "{initial.root.identity}"',
                     "",
                     "[produced]",
-                    "files = [" + ", ".join(json.dumps(path.relative_to(out_dir).as_posix()) for path in outputs) + "]",
+                    *[
+                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(out_dir).as_posix())}\ntype = {json.dumps(output.artifact_type)}'
+                        for output in outputs
+                    ],
                     "",
                     "[output_hashes]",
                     *[
-                        f'{json.dumps(path.relative_to(out_dir).as_posix())} = "sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"'
-                        for path in outputs
+                        f'{json.dumps(output.path.relative_to(out_dir).as_posix())} = "sha256:{hashlib.sha256(output.path.read_bytes()).hexdigest()}"'
+                        for output in outputs
                     ],
                     "",
                     "[input_hashes]",
@@ -146,7 +206,9 @@ class GraphRunTests(unittest.TestCase):
 
         def native(context):
             calls.append(context.goal_id)
-            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+            for output in context.declared_outputs.values():
+                output.path.write_text("native\n", encoding="utf-8")
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=tuple(context.declared_outputs.values()))
 
         try:
             plan = Planner(config, repo_root=ROOT).plan("sw.program.native")
@@ -163,7 +225,9 @@ class GraphRunTests(unittest.TestCase):
         plan = Planner(config).plan("sw.program.native")
 
         def native(context):
-            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+            for output in context.declared_outputs.values():
+                output.path.write_text("native\n", encoding="utf-8")
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=tuple(context.declared_outputs.values()))
 
         summary = Executor(config, adapters={"sw.program.native": native}).run_plan(plan)
         rendered = format_run_summary(summary, repo_root=ROOT, color=True)
@@ -236,11 +300,13 @@ class GraphRunTests(unittest.TestCase):
 
         def record(name: str):
             def adapter(context):
+                for output in context.declared_outputs.values():
+                    output.path.write_text(f"{name}\n", encoding="utf-8")
                 return RunResult(
                     goal_id=context.goal_id,
                     command=("fake", name),
                     returncode=0,
-                    produced=(context.artifact_dir / f"{name}.artifact",),
+                    produced=tuple(context.declared_outputs.values()),
                 )
             return adapter
 
@@ -265,11 +331,13 @@ class GraphRunTests(unittest.TestCase):
         stream = io.StringIO()
 
         def native(context):
+            for output in context.declared_outputs.values():
+                output.path.write_text("native\n", encoding="utf-8")
             return RunResult(
                 goal_id=context.goal_id,
                 command=("fake", "native"),
                 returncode=0,
-                produced=(context.artifact_dir / "native.artifact",),
+                produced=tuple(context.declared_outputs.values()),
             )
 
         summary = Executor(config, adapters={"sw.program.native": native}).run_plan(
@@ -281,7 +349,7 @@ class GraphRunTests(unittest.TestCase):
         self.assertEqual(summary.returncode, 0)
         self.assertIn("╭─ [1/1] sw.program.native", rendered)
         self.assertIn("\r\033[2K│  ✓ completed", rendered)
-        self.assertIn("│  produced: native.artifact", rendered)
+        self.assertIn("│  produced: nbody_x86", rendered)
         self.assertIn("╰─ 1 completed, 0 skipped, 0 failed", rendered)
         self.assertNotIn("running fake native\n✓", rendered)
 
@@ -291,7 +359,9 @@ class GraphRunTests(unittest.TestCase):
         stream = io.StringIO()
 
         def native(context):
-            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=())
+            for output in context.declared_outputs.values():
+                output.path.write_text("native\n", encoding="utf-8")
+            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=tuple(context.declared_outputs.values()))
 
         Executor(config, adapters={"sw.program.native": native}).run_plan(
             plan,
@@ -418,7 +488,7 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["goal"], "sw.program.native")
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
-        self.assertEqual(metadata["produced"]["files"], [f"{self.program}_x86"])
+        self.assertEqual(metadata["produced"]["executable"], {"path": f"{self.program}_x86", "type": "native-executable"})
         self.assertIn(f"{self.program}_x86", metadata["output_hashes"])
         self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
         self.assertIn(f"sw/programs/{self.program}/nbody.c", metadata["input_hashes"])
@@ -465,7 +535,8 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["goal"], "sw.program.elf")
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
-        self.assertEqual(metadata["produced"]["files"], [f"{self.program}.elf", f"{self.program}.map"])
+        self.assertEqual(metadata["produced"]["elf"], {"path": f"{self.program}.elf", "type": "riscv-elf"})
+        self.assertEqual(metadata["produced"]["map"], {"path": f"{self.program}.map", "type": "linker-map"})
         self.assertIn(f"{self.program}.elf", metadata["output_hashes"])
         self.assertIn(f"{self.program}.map", metadata["output_hashes"])
         self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
@@ -506,8 +577,12 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
         self.assertEqual(
-            metadata["produced"]["files"],
-            [f"{self.program}_instructions.mem", f"{self.program}_dump_real.asm"],
+            metadata["produced"]["imem"],
+            {"path": f"{self.program}_instructions.mem", "type": "instruction-memory"},
+        )
+        self.assertEqual(
+            metadata["produced"]["objdump"],
+            {"path": f"{self.program}_dump_real.asm", "type": "objdump"},
         )
         self.assertEqual(metadata["dependencies"]["sw.program.elf"], elf_dir.name)
         self.assertIn(f"{self.program}_instructions.mem", metadata["output_hashes"])

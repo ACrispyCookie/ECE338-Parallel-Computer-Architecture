@@ -12,6 +12,13 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class ProducedArtifact:
+    role: str
+    path: Path
+    artifact_type: str
+
+
+@dataclass(frozen=True)
 class ArtifactStatus:
     state: str
     path: Path | None
@@ -50,21 +57,30 @@ def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactS
     if metadata.get("goal") != node.goal_id or metadata.get("identity") != node.identity:
         return ArtifactStatus("invalid", directory, "artifact metadata mismatch")
     produced = metadata.get("produced", {})
-    produced_files = produced.get("files", ()) if isinstance(produced, dict) else ()
     output_hashes = metadata.get("output_hashes")
     input_hashes = metadata.get("input_hashes")
-    if not isinstance(produced_files, list) or not isinstance(output_hashes, dict) or not isinstance(input_hashes, dict):
+    if not isinstance(produced, dict) or not isinstance(output_hashes, dict) or not isinstance(input_hashes, dict):
         return ArtifactStatus("unknown", directory, "metadata lacks validation hashes")
 
-    expected_outputs = {_display_path(path, directory) for path in resolve_artifact_outputs(directory, node)}
+    expected_outputs = {artifact.role: artifact for artifact in resolve_artifact_outputs(directory, node)}
     if expected_outputs:
-        recorded_outputs = {relative for relative in produced_files if isinstance(relative, str)}
-        if recorded_outputs != expected_outputs:
-            missing = sorted(expected_outputs - recorded_outputs)
-            extra = sorted(recorded_outputs - expected_outputs)
+        recorded_outputs = {
+            role: entry
+            for role, entry in produced.items()
+            if isinstance(role, str) and isinstance(entry, dict) and "path" in entry and "type" in entry
+        }
+        if set(recorded_outputs) != set(expected_outputs):
+            missing = sorted(set(expected_outputs) - set(recorded_outputs))
+            extra = sorted(set(recorded_outputs) - set(expected_outputs))
             if missing:
-                return ArtifactStatus("incomplete", directory, f"missing output: {missing[0]}")
-            return ArtifactStatus("stale", directory, f"output set changed: {extra[0]}")
+                output = expected_outputs[missing[0]]
+                return ArtifactStatus("incomplete", directory, f"declared output missing: {output.role} -> {_display_path(output.path, directory)}")
+            return ArtifactStatus("stale", directory, f"output role set changed: {extra[0]}")
+        for role, expected in expected_outputs.items():
+            recorded = recorded_outputs[role]
+            expected_path = _display_path(expected.path, directory)
+            if recorded.get("path") != expected_path or recorded.get("type") != expected.artifact_type:
+                return ArtifactStatus("stale", directory, f"output declaration changed: {role}")
 
     expected_inputs = {_display_path(path, root) for path in resolve_artifact_inputs(root, node)}
     if expected_inputs:
@@ -75,16 +91,14 @@ def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactS
             changed = missing[0] if missing else extra[0]
             return ArtifactStatus("stale", directory, f"input set changed: {changed}")
 
-    for relative in produced_files:
-        if not isinstance(relative, str):
-            return ArtifactStatus("invalid", directory, "artifact metadata has invalid produced file entry")
-        output = directory / relative
-        if not output.exists():
+    for artifact in expected_outputs.values():
+        relative = _display_path(artifact.path, directory)
+        if not artifact.path.exists():
             return ArtifactStatus("incomplete", directory, f"missing output: {relative}")
         expected = output_hashes.get(relative)
         if expected is None:
             return ArtifactStatus("unknown", directory, f"metadata lacks output hash: {relative}")
-        if _sha256_uri(output) != expected:
+        if _sha256_uri(artifact.path) != expected:
             return ArtifactStatus("invalid", directory, f"output hash mismatch: {relative}")
     for relative, expected in sorted(input_hashes.items()):
         if not isinstance(relative, str) or not isinstance(expected, str):
@@ -127,7 +141,7 @@ def resolve_artifact_outputs(
     directory: str | Path,
     node: GoalInstance,
     config: ResolvedConfig | None = None,
-) -> tuple[Path, ...]:
+) -> tuple[ProducedArtifact, ...]:
     from .goals import GOALS
 
     goal = GOALS.get(node.goal_id)
@@ -135,14 +149,21 @@ def resolve_artifact_outputs(
         return ()
     params = _template_values(node, config)
     root = Path(directory)
-    return tuple(root / template.format_map(params) for template in goal.artifact.outputs)
+    return tuple(
+        ProducedArtifact(
+            role=spec.role,
+            path=root / spec.path_template.format_map(params),
+            artifact_type=spec.artifact_type,
+        )
+        for spec in goal.artifact.outputs
+    )
 
 
 def write_artifact_metadata(
     directory: Path,
     *,
     node: GoalInstance,
-    produced: tuple[Path, ...],
+    produced: tuple[ProducedArtifact, ...],
     dependency_identities: Mapping[str, str],
     input_paths: tuple[Path, ...] = (),
     repo_root: str | Path | None = None,
@@ -167,7 +188,7 @@ def _render_artifact_metadata(
     directory: Path,
     *,
     node: GoalInstance,
-    produced: tuple[Path, ...],
+    produced: tuple[ProducedArtifact, ...],
     dependency_identities: Mapping[str, str],
     input_paths: tuple[Path, ...],
     repo_root: Path,
@@ -185,12 +206,19 @@ def _render_artifact_metadata(
     for key, value in node.params:
         lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
     lines.extend(["", "[produced]"])
-    relative_files = [_display_path(path, directory) for path in produced]
-    lines.append(f"files = [{', '.join(_toml_value(path) for path in relative_files)}]")
+    for artifact in produced:
+        lines.extend(
+            [
+                "",
+                f"[produced.{_toml_key(artifact.role)}]",
+                f"path = {_toml_value(_display_path(artifact.path, directory))}",
+                f"type = {_toml_value(artifact.artifact_type)}",
+            ]
+        )
     lines.extend(["", "[output_hashes]"])
-    for path in produced:
-        if path.exists():
-            lines.append(f"{_toml_key(_display_path(path, directory))} = {_toml_value(_sha256_uri(path))}")
+    for artifact in produced:
+        if artifact.path.exists():
+            lines.append(f"{_toml_key(_display_path(artifact.path, directory))} = {_toml_value(_sha256_uri(artifact.path))}")
     lines.extend(["", "[input_hashes]"])
     for path in sorted(input_paths):
         if path.exists():
@@ -239,6 +267,7 @@ def _toml_value(value: object) -> str:
 
 
 __all__ = [
+    "ProducedArtifact",
     "ArtifactStatus",
     "artifact_dir",
     "artifacts_root",

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import Mapping
 
-from .artifacts import artifact_dir, resolve_artifact_inputs, write_artifact_metadata
+from .artifacts import ProducedArtifact, artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs, write_artifact_metadata
 from .config import ResolvedConfig
 from .planner import GoalInstance, Plan
 
@@ -19,7 +19,7 @@ class RunResult:
     goal_id: str
     command: tuple[str, ...]
     returncode: int
-    produced: tuple[Path, ...]
+    produced: tuple[ProducedArtifact | Path, ...]
     stdout: str = ""
     stderr: str = ""
 
@@ -30,7 +30,9 @@ class ExecutionContext:
     repo_root: Path
     node: GoalInstance
     artifact_dir: Path
-    dependency_artifacts: Mapping[str, tuple[Path, ...]]
+    dependency_artifacts: Mapping[str, tuple[ProducedArtifact, ...]]
+    dependency_outputs: Mapping[str, Mapping[str, ProducedArtifact]]
+    declared_outputs: Mapping[str, ProducedArtifact]
 
     @property
     def goal_id(self) -> str:
@@ -100,7 +102,7 @@ class Executor:
         self._preflight(plan, adapters)
         executable_count = sum(1 for node in plan.nodes if node.goal_id in adapters)
         records: list[RunRecord] = []
-        dependency_artifacts: dict[str, tuple[Path, ...]] = {}
+        dependency_artifacts: dict[str, tuple[ProducedArtifact, ...]] = {}
         dependency_identities: dict[str, str] = {}
         nodes_by_key = {node.key: node for node in plan.nodes}
         if reporter is not None:
@@ -118,6 +120,8 @@ class Executor:
                 raise ExecuteError(f"no executor adapter registered for required goal {node.goal_id}")
 
             context = self._context_for(node, dependency_artifacts)
+            if node.kind == "artifact":
+                context.artifact_dir.mkdir(parents=True, exist_ok=True)
             records.append(RunRecord(node=node, status="running"))
             if reporter is not None:
                 reporter.goal_started(node, context)  # type: ignore[attr-defined]
@@ -143,6 +147,23 @@ class Executor:
                 if reporter is not None:
                     reporter.plan_finished(summary)  # type: ignore[attr-defined]
                 return summary
+            canonical, failure = self._validate_successful_outputs(node, context, result)
+            if failure is not None:
+                result = replace(result, returncode=1, produced=(), stderr=(result.stderr + "\n" + failure).strip())
+                records.append(RunRecord(node=node, status="failed", result=result, reason=failure))
+                if reporter is not None:
+                    reporter.goal_failed(node, result, elapsed)  # type: ignore[attr-defined]
+                for remaining in plan.nodes[index + 1:]:
+                    if remaining.goal_id in adapters:
+                        reason = f"dependency {node.goal_id} failed"
+                        records.append(RunRecord(node=remaining, status="stopped", reason=reason))
+                        if reporter is not None:
+                            reporter.goal_stopped(remaining, reason)  # type: ignore[attr-defined]
+                summary = RunSummary(root=plan.root, planned_count=len(plan.nodes), executable_count=executable_count, records=tuple(records))
+                if reporter is not None:
+                    reporter.plan_finished(summary)  # type: ignore[attr-defined]
+                return summary
+            result = replace(result, produced=canonical)
             records.append(RunRecord(node=node, status="done", result=result))
             if node.kind == "artifact":
                 write_artifact_metadata(
@@ -157,7 +178,7 @@ class Executor:
                     input_paths=resolve_artifact_inputs(self.repo_root, node, self.config),
                     repo_root=self.repo_root,
                 )
-            dependency_artifacts[node.goal_id] = result.produced
+            dependency_artifacts[node.key] = result.produced
             dependency_identities[node.goal_id] = node.identity
             if reporter is not None:
                 reporter.goal_completed(node, result, elapsed)  # type: ignore[attr-defined]
@@ -171,6 +192,32 @@ class Executor:
         if reporter is not None:
             reporter.plan_finished(summary)  # type: ignore[attr-defined]
         return summary
+
+    def _validate_successful_outputs(
+        self,
+        node: GoalInstance,
+        context: ExecutionContext,
+        result: RunResult,
+    ) -> tuple[tuple[ProducedArtifact, ...], str | None]:
+        declared = context.declared_outputs
+        if node.kind != "artifact" or not declared:
+            return tuple(item for item in result.produced if isinstance(item, ProducedArtifact)), None
+        produced_by_role: dict[str, ProducedArtifact] = {
+            item.role: item for item in result.produced if isinstance(item, ProducedArtifact)
+        }
+        produced_paths = {item.resolve() if isinstance(item, Path) else item.path.resolve() for item in result.produced}
+        canonical: list[ProducedArtifact] = []
+        for role, expected in declared.items():
+            artifact = produced_by_role.get(role, expected)
+            if artifact.path.resolve() != expected.path.resolve() or artifact.artifact_type != expected.artifact_type:
+                return (), f"declared output mismatch: {role} -> {_display_path(expected.path, context.artifact_dir)}"
+            if not expected.path.exists():
+                return (), f"declared output missing: {role} -> {_display_path(expected.path, context.artifact_dir)}"
+            if produced_by_role or expected.path.resolve() in produced_paths or not result.produced:
+                canonical.append(expected)
+            else:
+                return (), f"declared output missing: {role} -> {_display_path(expected.path, context.artifact_dir)}"
+        return tuple(canonical), None
 
     def _direct_dependency_identities(
         self,
@@ -205,14 +252,26 @@ class Executor:
     def _context_for(
         self,
         node: GoalInstance,
-        dependency_artifacts: Mapping[str, tuple[Path, ...]],
+        dependency_artifacts: Mapping[str, tuple[ProducedArtifact, ...]],
     ) -> ExecutionContext:
+        declared_outputs = {
+            artifact.role: artifact
+            for artifact in resolve_artifact_outputs(artifact_dir(self.repo_root, node), node, self.config)
+        }
+        dependency_outputs: dict[str, dict[str, ProducedArtifact]] = {}
+        dependency_artifacts_by_role: dict[str, tuple[ProducedArtifact, ...]] = {}
+        for role, dependency_key in node.dependency_roles:
+            artifacts = dependency_artifacts.get(dependency_key, ())
+            dependency_artifacts_by_role[role] = artifacts
+            dependency_outputs[role] = {artifact.role: artifact for artifact in artifacts}
         return ExecutionContext(
             config=self.config,
             repo_root=self.repo_root,
             node=node,
             artifact_dir=artifact_dir(self.repo_root, node),
-            dependency_artifacts=dependency_artifacts,
+            dependency_artifacts=dependency_artifacts_by_role,
+            dependency_outputs=dependency_outputs,
+            declared_outputs=declared_outputs,
         )
 
 
@@ -251,7 +310,8 @@ def format_run_summary(summary: RunSummary, *, repo_root: str | Path | None = No
             lines.append(f"   command:  {_format_command(record.result.command)}")
             if record.result.produced:
                 lines.append("   produced:")
-                for path in record.result.produced:
+                for artifact in record.result.produced:
+                    path = artifact.path if isinstance(artifact, ProducedArtifact) else artifact
                     lines.append(f"     {_display_path(path, root)}")
             if record.status == "failed":
                 lines.append(f"   exit:     {record.result.returncode}")

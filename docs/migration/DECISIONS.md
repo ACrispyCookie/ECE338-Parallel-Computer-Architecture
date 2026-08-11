@@ -228,3 +228,18 @@ Accepted Milestone 21 direction:
 - Artifact validation compares recorded metadata against the current declarative input/output spec before trusting hashes.
 - `Executor._input_paths_for()` is removed; software input selection is no longer hardcoded in the executor.
 - `sw.program.image` expected outputs describe current adapter reality: instruction-memory image and objdump artifact.
+
+## Strict typed artifact output contracts
+
+Accepted Milestone 22 direction:
+
+- Keep the artifact output model minimal: `role`, `path`, and `type`.
+- Output roles are stable interface names used by consumers and metadata.
+- Output paths describe the current storage location relative to the artifact directory.
+- Output types are semantic compatibility strings such as `riscv-elf`, `linker-map`, `instruction-memory`, `objdump`, and `native-executable`; there is no type registry yet.
+- Successful artifact metadata records produced outputs under `[produced.<role>]` with `path` and `type`, not as a loose `produced.files` list.
+- Cache validation treats output role, path, or type drift as a miss/stale condition before trusting hashes.
+- An artifact adapter returning success is not sufficient: the executor requires every declared output to exist before recording the run as successful.
+- Dependency artifact consumption uses dependency role plus output role, for example `dependency_outputs["elf"]["elf"]`, rather than filename suffix guessing.
+- `sw.program.image` consumes the `sw.program.elf` dependency through its declared `elf` output of type `riscv-elf`.
+- Cache skipping remains deferred; `gpgpu run` still executes adapters even when planning reports `CACHE HIT`.

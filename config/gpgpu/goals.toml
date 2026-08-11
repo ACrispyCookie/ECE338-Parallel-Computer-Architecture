@@ -11,7 +11,10 @@ input_globs = [
   "sw/programs/{program}/*.c",
   "sw/programs/{program}/*.h",
 ]
-outputs = ["{program}"]
+
+[goals."sw.program.native".artifact.outputs.executable]
+path = "{program}_x86"
+type = "native-executable"
 
 [goals."sw.program.elf"]
 kind = "artifact"
@@ -30,7 +33,13 @@ input_globs = [
   "sw/programs/{program}/*.ld",
   "sw/programs/{program}/fpga.py",
 ]
-outputs = ["{program}.elf", "{program}.map"]
+[goals."sw.program.elf".artifact.outputs.elf]
+path = "{program}.elf"
+type = "riscv-elf"
+
+[goals."sw.program.elf".artifact.outputs.map]
+path = "{program}.map"
+type = "linker-map"
 
 [goals."sw.program.image"]
 kind = "artifact"
@@ -49,7 +58,13 @@ input_globs = [
   "sw/programs/{program}/*.ld",
   "sw/programs/{program}/fpga.py",
 ]
-outputs = ["{program}_instructions.mem", "{program}_dump_real.asm"]
+[goals."sw.program.image".artifact.outputs.imem]
+path = "{program}_instructions.mem"
+type = "instruction-memory"
+
+[goals."sw.program.image".artifact.outputs.objdump]
+path = "{program}_dump_real.asm"
+type = "objdump"
 
 [[goals."sw.program.image".dependencies]]
 role = "elf"

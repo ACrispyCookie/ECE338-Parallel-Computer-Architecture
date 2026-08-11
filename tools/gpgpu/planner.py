@@ -32,6 +32,7 @@ class GoalInstance:
     description: str
     lifecycle: str | None = None
     dependencies: tuple[str, ...] = ()
+    dependency_roles: tuple[tuple[str, str], ...] = ()
     dependency_identities: tuple[tuple[str, str], ...] = ()
     expected_outputs: tuple[str, ...] = ()
     side_effects: tuple[str, ...] = ()
@@ -165,7 +166,8 @@ class Planner:
         if key in self._instances:
             return self._instances[key]
 
-        dependency_instances = tuple(self._require(dep_id) for dep_id in self._dependency_goal_ids(goal_id))
+        dependency_entries = tuple(self._dependency_entries(goal_id))
+        dependency_instances = tuple(self._require(dependency.goal_id) for dependency in dependency_entries)
         dependency_keys = tuple(instance.key for instance in dependency_instances)
         identity = self._identity_for(
             definition,
@@ -182,6 +184,7 @@ class Planner:
             description=definition.description,
             lifecycle=definition.lifecycle,
             dependencies=dependency_keys,
+            dependency_roles=tuple((dependency.role, instance.key) for dependency, instance in zip(dependency_entries, dependency_instances)),
             dependency_identities=tuple(
                 (instance.goal_id, instance.identity) for instance in dependency_instances
             ),
@@ -199,6 +202,7 @@ class Planner:
                 description=instance.description,
                 lifecycle=instance.lifecycle,
                 dependencies=instance.dependencies,
+                dependency_roles=instance.dependency_roles,
                 dependency_identities=instance.dependency_identities,
                 expected_outputs=instance.expected_outputs,
                 side_effects=instance.side_effects,
@@ -211,13 +215,13 @@ class Planner:
         names = definition.artifact_params if definition.kind == "artifact" else definition.runtime_params
         return tuple((name, self.config.get(name)) for name in names)
 
-    def _dependency_goal_ids(self, goal_id: str) -> tuple[str, ...]:
+    def _dependency_entries(self, goal_id: str):
         definition = GOALS[goal_id]
-        included: list[str] = []
+        included = []
         for dependency in definition.dependencies:
             if not self._condition_matches(dependency.when):
                 continue
-            included.append(dependency.goal_id)
+            included.append(dependency)
             if dependency.note_kind is not None:
                 self._notes.append(
                     PlanNote(

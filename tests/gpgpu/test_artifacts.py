@@ -4,13 +4,14 @@ import hashlib
 import json
 import shutil
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from tools.gpgpu.artifacts import artifact_dir, read_artifact_status, resolve_artifact_inputs, resolve_artifact_outputs
+from tools.gpgpu.artifacts import artifact_dir, read_artifact_status, resolve_artifact_inputs, resolve_artifact_outputs, write_artifact_metadata
 from tools.gpgpu.config import ConfigResolver
 from tools.gpgpu.planner import Planner
 
@@ -54,17 +55,20 @@ class ArtifactValidationTests(unittest.TestCase):
         outputs = resolve_artifact_outputs(self.directory, self.node, self.config)
         input_paths = resolve_artifact_inputs(ROOT, self.node, self.config)
         for output in outputs:
-            output.write_text(f"contents for {output.name}\n", encoding="utf-8")
+            output.path.write_text(f"contents for {output.path.name}\n", encoding="utf-8")
         self.write_metadata(
             "\n".join(
                 [
                     "[produced]",
-                    "files = [" + ", ".join(json.dumps(path.relative_to(self.directory).as_posix()) for path in outputs) + "]",
+                    *[
+                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(self.directory).as_posix())}\ntype = {json.dumps(output.artifact_type)}'
+                        for output in outputs
+                    ],
                     "",
                     "[output_hashes]",
                     *[
-                        f'{json.dumps(path.relative_to(self.directory).as_posix())} = "{_sha256_for_test(path)}"'
-                        for path in outputs
+                        f'{json.dumps(output.path.relative_to(self.directory).as_posix())} = "{_sha256_for_test(output.path)}"'
+                        for output in outputs
                     ],
                     "",
                     "[input_hashes]",
@@ -76,7 +80,7 @@ class ArtifactValidationTests(unittest.TestCase):
             )
         )
         source_under_test = next(path for path in input_paths if path.relative_to(ROOT).as_posix() == "sw/programs/nbody/nbody.c")
-        return outputs[0], source_under_test
+        return outputs[0].path, source_under_test
 
     def test_goal_identity_only_metadata_is_unknown_and_compact_miss(self):
         self.write_metadata()
@@ -108,9 +112,32 @@ class ArtifactValidationTests(unittest.TestCase):
 
     def test_artifact_outputs_resolve_from_declarative_spec(self):
         outputs = resolve_artifact_outputs(self.directory, self.node, self.config)
-        relative = {path.relative_to(self.directory).as_posix() for path in outputs}
+        by_role = {output.role: output for output in outputs}
 
-        self.assertEqual(relative, {"nbody.elf", "nbody.map"})
+        self.assertEqual(set(by_role), {"elf", "map"})
+        self.assertEqual(by_role["elf"].path.relative_to(self.directory).as_posix(), "nbody.elf")
+        self.assertEqual(by_role["elf"].artifact_type, "riscv-elf")
+        self.assertEqual(by_role["map"].path.relative_to(self.directory).as_posix(), "nbody.map")
+        self.assertEqual(by_role["map"].artifact_type, "linker-map")
+
+    def test_artifact_metadata_records_produced_roles_types_and_paths(self):
+        outputs = resolve_artifact_outputs(self.directory, self.node, self.config)
+        for output in outputs:
+            output.path.write_text(f"contents for {output.role}\n", encoding="utf-8")
+
+        write_artifact_metadata(
+            self.directory,
+            node=self.node,
+            produced=outputs,
+            dependency_identities={},
+            input_paths=resolve_artifact_inputs(ROOT, self.node, self.config),
+            repo_root=ROOT,
+        )
+
+        with (self.directory / "artifact.toml").open("rb") as handle:
+            metadata = tomllib.load(handle)
+        self.assertEqual(metadata["produced"]["elf"], {"path": "nbody.elf", "type": "riscv-elf"})
+        self.assertEqual(metadata["produced"]["map"], {"path": "nbody.map", "type": "linker-map"})
 
     def test_new_matching_input_file_makes_old_metadata_stale(self):
         self.write_validated_metadata()
@@ -131,8 +158,9 @@ class ArtifactValidationTests(unittest.TestCase):
         self.write_metadata(
             "\n".join(
                 [
-                    "[produced]",
-                    'files = ["nbody.elf"]',
+                    "[produced.elf]",
+                    'path = "nbody.elf"',
+                    'type = "riscv-elf"',
                     "",
                     "[output_hashes]",
                     f'"nbody.elf" = "{_sha256_for_test(output)}"',
@@ -147,7 +175,7 @@ class ArtifactValidationTests(unittest.TestCase):
         )
         status = read_artifact_status(ROOT, self.node)
         self.assertEqual(status.state, "incomplete")
-        self.assertIn("missing output: nbody.map", status.reason)
+        self.assertIn("declared output missing: map -> nbody.map", status.reason)
         self.assertTrue(output.exists())
 
     def test_executor_no_longer_owns_transitional_input_selector(self):
@@ -213,7 +241,7 @@ class ArtifactValidationTests(unittest.TestCase):
         image_dir.mkdir(parents=True, exist_ok=True)
         outputs = resolve_artifact_outputs(image_dir, image_node, self.config)
         for output in outputs:
-            output.write_text(f"contents for {output.name}\n", encoding="utf-8")
+            output.path.write_text(f"contents for {output.path.name}\n", encoding="utf-8")
         input_paths = resolve_artifact_inputs(ROOT, image_node, self.config)
         (image_dir / "artifact.toml").write_text(
             "\n".join(
@@ -222,12 +250,15 @@ class ArtifactValidationTests(unittest.TestCase):
                     f'identity = "{image_node.identity}"',
                     "",
                     "[produced]",
-                    "files = [" + ", ".join(json.dumps(path.relative_to(image_dir).as_posix()) for path in outputs) + "]",
+                    *[
+                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(image_dir).as_posix())}\ntype = {json.dumps(output.artifact_type)}'
+                        for output in outputs
+                    ],
                     "",
                     "[output_hashes]",
                     *[
-                        f'{json.dumps(path.relative_to(image_dir).as_posix())} = "{_sha256_for_test(path)}"'
-                        for path in outputs
+                        f'{json.dumps(output.path.relative_to(image_dir).as_posix())} = "{_sha256_for_test(output.path)}"'
+                        for output in outputs
                     ],
                     "",
                     "[input_hashes]",

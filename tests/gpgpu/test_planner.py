@@ -53,12 +53,15 @@ class PlannerFoundationTests(unittest.TestCase):
         input_paths = resolve_artifact_inputs(ROOT, node)
         with (directory / "artifact.toml").open("a", encoding="utf-8") as handle:
             handle.write("[produced]\n")
-            handle.write("files = [" + ", ".join(json.dumps(path.relative_to(directory).as_posix()) for path in outputs) + "]\n\n")
-            handle.write("[output_hashes]\n")
             for output in outputs:
-                output.write_text(f"validated output for {output.name}\n", encoding="utf-8")
-                output_hash = hashlib.sha256(output.read_bytes()).hexdigest()
-                handle.write(f'{json.dumps(output.relative_to(directory).as_posix())} = "sha256:{output_hash}"\n')
+                output.path.write_text(f"validated output for {output.path.name}\n", encoding="utf-8")
+                handle.write(f'\n[produced.{json.dumps(output.role)}]\n')
+                handle.write(f'path = {json.dumps(output.path.relative_to(directory).as_posix())}\n')
+                handle.write(f'type = {json.dumps(output.artifact_type)}\n')
+            handle.write("\n[output_hashes]\n")
+            for output in outputs:
+                output_hash = hashlib.sha256(output.path.read_bytes()).hexdigest()
+                handle.write(f'{json.dumps(output.path.relative_to(directory).as_posix())} = "sha256:{output_hash}"\n')
             handle.write("\n[input_hashes]\n")
             for input_path in input_paths:
                 input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()

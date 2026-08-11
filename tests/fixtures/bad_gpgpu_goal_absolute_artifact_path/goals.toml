@@ -6,4 +6,6 @@ artifact_params = ["program"]
 
 [goals."sw.program.elf".artifact]
 input_globs = ["/absolute.c"]
-outputs = ["{program}.elf"]
+[goals."sw.program.elf".artifact.outputs.elf]
+path = "{program}.elf"
+type = "riscv-elf"

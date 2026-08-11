@@ -185,10 +185,10 @@ def _format_elapsed(elapsed: float) -> str:
     return f"{elapsed:.2f}s"
 
 
-def _produced_summary(paths: tuple[Path, ...]) -> str:
+def _produced_summary(paths: tuple[Any, ...]) -> str:
     if not paths:
         return ""
-    return ", ".join(path.name for path in paths)
+    return ", ".join((item.path if hasattr(item, "path") else item).name for item in paths)
 
 
 def _indent(text: str) -> str:

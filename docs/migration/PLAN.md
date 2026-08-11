@@ -565,6 +565,41 @@ Expected evidence:
 - full test discovery passes;
 - smoke run/plan/explain/clean cycle still works.
 
+### Milestone 22: strict typed artifact output contracts
+
+Objective: tighten the artifact interface before cache skipping by making declared outputs role-addressable and enforcing that successful adapters actually produce them.
+
+Scope:
+
+- keep the output data model intentionally small: role, path, and type;
+- declare software artifact outputs in `config/gpgpu/goals.toml` as typed output tables;
+- record produced outputs in `artifact.toml` under `[produced.<role>]` with path and type;
+- validate output role/path/type declarations during cache-status checks;
+- require declared outputs to exist after adapter success before a run is recorded as successful;
+- pass dependency outputs to adapters by dependency role and output role;
+- update `sw.program.image` to consume the declared ELF dependency output rather than scanning paths by suffix.
+
+Non-goals:
+
+- no cache skipping;
+- no artifact injection;
+- no artifact type registry;
+- no extra compatibility metadata beyond role/path/type;
+- no Makefile flag plumbing;
+- no new executable goals or adapters;
+- no legacy script deletion.
+
+Expected evidence:
+
+- tests cover typed output declaration loading and invalid output specs;
+- tests cover `artifact.toml` output metadata shape;
+- tests cover cache miss/stale behavior for output declaration drift;
+- tests cover adapter-success-with-missing-output failure;
+- tests cover dependency output lookup by dependency role/output role;
+- structure tests prevent suffix-based dependency artifact lookup in software adapters;
+- full test discovery passes;
+- smoke run/plan/clean cycle still works.
+
 ## Dependency execution policy
 
 Dependencies are declared in `config/gpgpu/goals.toml` and loaded into typed `GoalDefinition.dependencies` records by `tools/gpgpu/goals.py`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
@@ -675,11 +710,11 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-After Milestone 21, remaining cleanup should continue toward final cache-safe goals:
+After Milestone 22, remaining cleanup should continue toward final cache-safe goals:
 
-1. Strict adapter output contracts: fail adapters when required outputs are missing and replace suffix-based dependency artifact lookup with typed produced artifacts.
-2. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
-3. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
+1. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
+2. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
+3. Cache execution policy: define and test when artifact goals may be skipped, while action/check/service goals remain explicit.
 4. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
 
 ## Rollback

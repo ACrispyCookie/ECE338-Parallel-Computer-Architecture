@@ -17,9 +17,16 @@ class GoalConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class ArtifactOutputSpec:
+    role: str
+    path_template: str
+    artifact_type: str
+
+
+@dataclass(frozen=True)
 class ArtifactSpec:
     input_globs: tuple[str, ...] = ()
-    outputs: tuple[str, ...] = ()
+    outputs: tuple[ArtifactOutputSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -210,11 +217,43 @@ def _load_artifact_spec(goal_id: str, entry: object, *, schema: Mapping[str, Set
         raise GoalConfigError(f"Unknown artifact field for {goal_id}: {sorted(unknown)[0]}")
     spec = ArtifactSpec(
         input_globs=_string_tuple(entry.get("input_globs", ()), f"Goal {goal_id} artifact.input_globs"),
-        outputs=_string_tuple(entry.get("outputs", ()), f"Goal {goal_id} artifact.outputs"),
+        outputs=tuple(_load_artifact_outputs(goal_id, entry.get("outputs", {}), schema=schema)),
     )
-    for value in (*spec.input_globs, *spec.outputs):
+    for value in spec.input_globs:
         _validate_artifact_path_template(value, schema=schema)
+    for output in spec.outputs:
+        _validate_artifact_path_template(output.path_template, schema=schema)
     return spec
+
+
+def _load_artifact_outputs(
+    goal_id: str,
+    value: object,
+    *,
+    schema: Mapping[str, SettingSpec],
+) -> list[ArtifactOutputSpec]:
+    if value in (None, {}):
+        return []
+    if not isinstance(value, dict):
+        raise GoalConfigError(f"Goal {goal_id} artifact.outputs must be a table")
+    outputs: list[ArtifactOutputSpec] = []
+    for role, entry in value.items():
+        if not isinstance(role, str) or not re.fullmatch(r"[A-Za-z0-9_]+", role):
+            raise GoalConfigError(f"Invalid artifact output role for {goal_id}: {role!r}")
+        if not isinstance(entry, dict):
+            raise GoalConfigError(f"Goal {goal_id} artifact output {role} must be a table")
+        unknown = set(entry) - {"path", "type"}
+        if unknown:
+            raise GoalConfigError(f"Unknown artifact output field for {goal_id}.{role}: {sorted(unknown)[0]}")
+        path_template = entry.get("path")
+        artifact_type = entry.get("type")
+        if not isinstance(path_template, str) or not path_template:
+            raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing path")
+        if not isinstance(artifact_type, str) or not artifact_type:
+            raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing type")
+        _validate_artifact_path_template(path_template, schema=schema)
+        outputs.append(ArtifactOutputSpec(role=role, path_template=path_template, artifact_type=artifact_type))
+    return outputs
 
 
 def _validate_goal_references(goals: Mapping[str, GoalDefinition], *, schema: Mapping[str, SettingSpec]) -> None:
@@ -276,6 +315,7 @@ from .config import ConfigResolver  # noqa: E402  # imported after definitions t
 GOALS = load_goals(_default_goals_path(), schema=ConfigResolver.SCHEMA)
 
 __all__ = [
+    "ArtifactOutputSpec",
     "ArtifactSpec",
     "GoalConfigError",
     "GoalDefinition",
