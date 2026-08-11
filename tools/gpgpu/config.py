@@ -21,6 +21,7 @@ class SettingSpec:
     type_name: str
     default: Any
     scope: str
+    manifest_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,11 +50,11 @@ class ConfigResolver:
     """Resolve typed GPGPU planner configuration from TOML manifests."""
 
     SCHEMA: dict[str, SettingSpec] = {
-        "architecture": SettingSpec("architecture", "str", "gpgpu32", "shared"),
-        "board_type": SettingSpec("board_type", "str", "zynq7000-zedboard", "shared"),
+        "architecture": SettingSpec("architecture", "str", "gpgpu32", "shared", manifest_dir="architectures"),
+        "board_type": SettingSpec("board_type", "str", "zynq7000-zedboard", "shared", manifest_dir="board_types"),
         "board": SettingSpec("board", "str", "zedboard", "machine-local"),
-        "program": SettingSpec("program", "str", "nbody", "shared"),
-        "demo": SettingSpec("demo", "str", "nbody", "shared"),
+        "program": SettingSpec("program", "str", "nbody", "shared", manifest_dir="programs"),
+        "demo": SettingSpec("demo", "str", "nbody", "shared", manifest_dir="demos"),
         "backend": SettingSpec("backend", "enum:fake,fpga-uart", "fake", "runtime"),
         "toolchain": SettingSpec("toolchain", "str", "riscv-gcc-rv32im-ilp32", "shared"),
         "program.optimization": SettingSpec("program.optimization", "enum:O0,O1,O2,O3", "O2", "artifact"),
@@ -100,6 +101,8 @@ class ConfigResolver:
         values: dict[str, Any] = {}
         provenance: dict[str, Provenance] = {}
 
+        cli_overrides = tuple(self._parse_set(item) for item in (set_values or []))
+
         for key, spec in self.SCHEMA.items():
             self._assign(values, provenance, key, spec.default, "schema default")
 
@@ -111,10 +114,8 @@ class ConfigResolver:
             profile_mapping, profile_source = self._load_profile(profile)
             self._apply_mapping(values, provenance, profile_mapping, profile_source)
 
-        self._apply_selected_manifest(values, provenance, "architecture", "architectures")
-        self._apply_selected_manifest(values, provenance, "board_type", "board_types")
-        self._apply_selected_manifest(values, provenance, "program", "programs")
-        self._apply_selected_manifest(values, provenance, "demo", "demos")
+        self._apply_manifest_selection_overrides(values, provenance, cli_overrides)
+        self._apply_selected_manifests(values, provenance)
 
         if profile_mapping is not None and profile_source is not None:
             self._apply_mapping(values, provenance, profile_mapping, profile_source)
@@ -129,8 +130,7 @@ class ConfigResolver:
             if key not in provenance or provenance[key].source == "schema default":
                 self._assign(values, provenance, key, value, "tool discovery default")
 
-        for item in set_values or []:
-            key, raw_value = self._parse_set(item)
+        for key, raw_value in cli_overrides:
             self._assign(values, provenance, key, raw_value, "CLI --set")
 
         return ResolvedConfig(values=values, provenance=provenance)
@@ -145,6 +145,23 @@ class ConfigResolver:
             raise ConfigError(f"Profile {profile} must define a [profile] table")
         source = f"{self._source_path(path)}:profile"
         return self._flatten(mapping), source
+
+    def _apply_manifest_selection_overrides(
+        self,
+        values: dict[str, Any],
+        provenance: dict[str, Provenance],
+        cli_overrides: tuple[tuple[str, str], ...],
+    ) -> None:
+        for key, raw_value in cli_overrides:
+            normalized = self._normalize_key(key)
+            spec = self.SCHEMA.get(normalized)
+            if spec is not None and spec.manifest_dir is not None:
+                self._assign(values, provenance, normalized, raw_value, "CLI --set selection")
+
+    def _apply_selected_manifests(self, values: dict[str, Any], provenance: dict[str, Provenance]) -> None:
+        for key, spec in self.SCHEMA.items():
+            if spec.manifest_dir is not None:
+                self._apply_selected_manifest(values, provenance, key, spec.manifest_dir)
 
     def _apply_selected_manifest(
         self,
@@ -231,7 +248,7 @@ class ConfigResolver:
         if "=" not in item:
             raise ConfigError(f"Invalid --set value {item!r}; expected namespace.key=value")
         key, value = item.split("=", 1)
-        key = key.strip()
+        key = self._normalize_key(key.strip())
         if not key:
             raise ConfigError("Invalid --set value with empty setting name")
         return key, value.strip()

@@ -206,3 +206,13 @@ Accepted Milestone 19 direction:
 - `docs/migration/CURRENT_STATE.md` is the current implementation map for non-test source files, goal coverage, data structures, build-system flow, and transitional-code inventory.
 - Cleanup should precede deeper adapter expansion where the foundation has known ambiguity: repo-root resolution, check-goal params, declarative artifact specs, strict adapter output contracts, and command/tool fingerprints.
 - Transitional implementation pieces should either be documented as temporary or moved into declarative metadata before becoming precedent for hardware/demo/check workflows.
+
+## Schema-driven selection and root consistency
+
+Accepted Milestone 20 direction:
+
+- Avoid adding new files for small conveniences; repo-root consistency is handled by explicit CLI root passing through existing planner/executor/cleaner constructors.
+- Manifest-selection behavior is declared by `SettingSpec.manifest_dir`, not by a hardcoded resolver key set.
+- CLI selection overrides for manifest-selecting settings are applied before selected manifests so `--set program=nbody` loads `config/gpgpu/programs/nbody.toml`; all CLI overrides are then applied again at final precedence.
+- Explicit setting overrides still win at final precedence, e.g. `--set program=nbody --set program.optimization=O3` yields `O3` from `CLI --set`.
+- Direct single-goal `Executor.run()` is removed; graph execution through `Executor.run_plan()` is the supported execution path.

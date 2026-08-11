@@ -99,6 +99,36 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertEqual(config.get("program.optimization"), "O2")
         self.assertIn("profiles/zed-demo.toml:profile", config.provenance_for("program.optimization").source)
 
+    def test_manifest_selectors_are_declared_in_schema(self):
+        manifest_selectors = {
+            key: spec.manifest_dir
+            for key, spec in ConfigResolver.SCHEMA.items()
+            if spec.manifest_dir is not None
+        }
+        self.assertEqual(
+            manifest_selectors,
+            {
+                "architecture": "architectures",
+                "board_type": "board_types",
+                "program": "programs",
+                "demo": "demos",
+            },
+        )
+
+    def test_cli_selection_override_reloads_selected_program_manifest_defaults(self):
+        config = ConfigResolver().resolve(set_values=["program=nbody"])
+
+        self.assertEqual(config.get("program"), "nbody")
+        self.assertEqual(config.get("program.optimization"), "O2")
+        self.assertIn("config/gpgpu/programs/nbody.toml:defaults", config.provenance_for("program.optimization").source)
+
+    def test_cli_specific_setting_override_wins_after_selection_manifest_defaults(self):
+        config = ConfigResolver().resolve(set_values=["program=nbody", "program.optimization=O3"])
+
+        self.assertEqual(config.get("program"), "nbody")
+        self.assertEqual(config.get("program.optimization"), "O3")
+        self.assertEqual(config.provenance_for("program.optimization").source, "CLI --set")
+
     def test_variant_is_not_part_of_initial_schema(self):
         config = ConfigResolver().resolve(profile="zed-demo")
         keys = {key for key, _, _ in config.normalized_items()}
@@ -407,6 +437,35 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertNotIn("\x1b[", rendered)
         self.assertIn("BUILD", rendered)
         self.assertIn("SERVICE", rendered)
+
+    def test_cli_plan_uses_repo_root_for_cache_paths_outside_repo_cwd(self):
+        original_cwd = Path.cwd()
+        tmp = ROOT / "out" / "tmp-cli-cwd"
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                import os
+
+                os.chdir(tmp)
+                code = main([
+                    "--color",
+                    "never",
+                    "plan",
+                    "sw.program.elf",
+                    "--set",
+                    "program=nbody",
+                    "--verbose",
+                ])
+        finally:
+            import os
+
+            os.chdir(original_cwd)
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn(str(ROOT / "out" / "artifacts" / "sw.program.elf"), rendered)
+        self.assertNotIn(str(tmp / "out" / "artifacts"), rendered)
 
     def test_cli_verbose_flag_enables_full_plan_output(self):
         stdout = io.StringIO()

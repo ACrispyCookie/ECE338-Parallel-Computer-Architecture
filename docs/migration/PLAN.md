@@ -503,6 +503,37 @@ Expected evidence:
 - `gpgpu list --internal` and representative `plan` commands still work;
 - full test discovery passes because documentation-only changes should not alter behavior.
 
+## Completed source-of-truth cleanup milestone
+
+### Milestone 20: schema-driven selection and CLI root consistency
+
+Objective: clean up source-of-truth behavior without adding convenience-only files or patchy selector hardcoding.
+
+Scope:
+
+- `SettingSpec` declares optional `manifest_dir` metadata for settings that select component manifests;
+- config resolution applies CLI overrides for manifest-selecting settings before selected manifests, then reapplies all CLI overrides at final precedence;
+- CLI computes repo root once through the existing resolver and passes it into planner, executor, and cleaner;
+- obsolete direct `Executor.run()` is removed so graph execution through `run_plan()` is the only executor run path.
+
+Non-goals:
+
+- no new goals;
+- no new adapters;
+- no cache skipping;
+- no new repo-root helper file;
+- no artifact-spec refactor;
+- no command/tool fingerprinting.
+
+Expected evidence:
+
+- tests prove selector behavior is declared in schema, not a hardcoded key set;
+- `--set program=nbody` loads `programs/nbody.toml` defaults;
+- `--set program=nbody --set program.optimization=O3` keeps final CLI precedence;
+- CLI `plan` from outside the repo still reports cache paths under the repo root;
+- executor structure tests prove `run_plan()` is the only public run API;
+- full test discovery passes.
+
 ## Dependency execution policy
 
 Dependencies are declared in `tools/gpgpu/goals.py` on `GoalDefinition.dependencies`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
@@ -613,14 +644,13 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-Milestone 19 recommends cleaning the foundation before adding more adapters:
+After Milestone 20, remaining cleanup should continue toward final cache-safe goals:
 
-1. Source-of-truth cleanup: fix stale current-status docs, centralize repo-root resolution, fix or document selection override precedence, and decide whether transitional executor APIs/formatters stay or go.
-2. Declarative artifact specs: move software input selection out of `Executor._input_paths_for`, declare expected inputs/outputs per artifact goal, and compare expected input sets against recorded metadata.
-3. Strict adapter output contracts: fail adapters when required outputs are missing and replace suffix-based dependency artifact lookup with typed produced artifacts.
-4. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
-5. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
-6. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
+1. Declarative artifact specs: move software input selection out of `Executor._input_paths_for`, declare expected inputs/outputs per artifact goal, and compare expected input sets against recorded metadata.
+2. Strict adapter output contracts: fail adapters when required outputs are missing and replace suffix-based dependency artifact lookup with typed produced artifacts.
+3. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
+4. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
+5. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
 
 ## Rollback
 

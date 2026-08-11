@@ -54,6 +54,12 @@ class ExecutorStructureTests(unittest.TestCase):
             ROOT / "out" / "artifacts" / "sw.program.elf" / node.identity,
         )
 
+    def test_executor_keeps_graph_execution_as_the_only_public_run_api(self):
+        from tools.gpgpu.executor import Executor
+
+        self.assertTrue(hasattr(Executor, "run_plan"))
+        self.assertFalse(hasattr(Executor, "run"))
+
 
 class GraphRunTests(unittest.TestCase):
     program = "nbody"

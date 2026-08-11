@@ -23,8 +23,8 @@ Most important cleanup findings:
 4. Software adapters do not fail if `make` returns success but required outputs are missing.
 5. Dependency identities are keyed by goal id, which will not handle multiple instances of the same goal.
 6. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
-7. CLI `--set` selection overrides such as `--set program=nbody` occur after selected manifests are applied, so dependent program defaults such as `program.optimization` can remain from the previous selection.
-8. Planner/executor/cleaner repo-root resolution is inconsistent.
+7. CLI selection settings are now schema-declared manifest selectors; CLI selection overrides are applied early enough to load the selected manifest and then reapplied at final CLI precedence.
+8. CLI now passes one repo root into planner, executor, and cleaner without adding a new helper file.
 9. Some migration docs contained historical statements that were stale if read as current status; the top-level compatibility status has now been corrected, but docs still need clearer historical/current separation.
 
 ## Current goal coverage
@@ -151,7 +151,7 @@ Current issues:
 - `ConfigResolver` owns schema, TOML loading, flattening, coercion, precedence, and provenance; this may need splitting later.
 - `TOOL_ENV_DEFAULTS` is named like discovery but currently just assigns defaults.
 - `GOAL_DEFAULTS` is global fallback behavior, not truly per-goal defaults.
-- CLI selection overrides happen after selected manifests. Example: `--set program=nbody` can change `program` without reapplying `config/gpgpu/programs/nbody.toml`, leaving `program.optimization` from the previously selected default/profile program.
+- CLI selection settings declare `manifest_dir` in `SettingSpec`; selection overrides are applied before selected manifests and all CLI overrides are applied again at final precedence.
 - Config values such as `program.optimization`, `program.march`, and `program.mabi` affect identities, but the Makefile backend still hardcodes corresponding flags.
 
 ### `tools/gpgpu/planner.py`
@@ -186,7 +186,7 @@ Current issues:
 
 - `_params_for()` uses artifact params only for kind `artifact`; check goals currently lose their declared artifact-affecting params.
 - Non-artifact identities are generic strings such as `"service"` or `"check"`, which is weak for future reporting/traceability.
-- Planner defaults to `Path.cwd()` for cache status, while executor and cleaner default to repo root.
+- CLI passes a shared repo root into the planner so CLI cache paths match run/clean roots; direct `Planner(...)` default still uses `Path.cwd()` for non-CLI use.
 - Artifact identity still does not include tool versions or generated config hashes.
 
 ### `tools/gpgpu/artifacts.py`
@@ -250,7 +250,6 @@ Justification:
 Current issues:
 
 - `_input_paths_for()` is transitional, software-specific, and should move to declarative artifact/input specs.
-- `run()` constructs a fake direct `GoalInstance` and appears to be a leftover transitional API now that CLI uses `run_plan()`.
 - `format_run_result()` and `format_run_summary()` overlap with `reporter.py` and may be legacy debug helpers.
 - Adapter success does not currently require all declared produced files to exist.
 - Direct dependency identities are keyed by goal id, not by dependency role/edge/instance.
@@ -543,10 +542,9 @@ Current limitation:
 | `Executor._direct_dependency_identities()` | Keyed by goal id. | Same multi-instance limitation. | Use dependency roles from `GoalDependency`. |
 | `sw_programs._dependency_artifact()` | Selects dependency artifact by suffix. | Untyped artifact selection is brittle. | Use typed produced artifact records/specs. |
 | `sw_programs._run_make_artifacts()` | Does not fail on missing required outputs. | Successful run can produce incomplete metadata. | Enforce required outputs. |
-| `Planner.repo_root` default | Uses `Path.cwd()`. | Plan cache paths can differ from run/clean paths. | Centralize repo-root resolution and pass explicitly. |
-| `ConfigResolver.resolve()` selection override order | CLI `--set program=...` is applied after selected manifests. | Program defaults can mismatch the final selected program. | Revisit precedence or add explicit selection-overrides pass before selected manifests. |
-| `Executor.run()` | Direct fake single-goal API. | May be leftover from earlier milestones. | Document as debug helper or remove. |
-| `format_run_result()`/`format_run_summary()` | Older formatting alongside reporters. | Duplicate presentation paths. | Keep as debug helpers or remove. |
+| CLI repo-root coordination | CLI computes one repo root via `ConfigResolver` and passes it to planner, executor, and cleaner. | Prevents CLI cache paths from depending on current working directory. | Keep explicit root passing; avoid adding a helper file until path policy grows. |
+| Config manifest selection | `SettingSpec.manifest_dir` declares which settings select manifests. | Avoids hardcoded selector-key sets and fixes `--set program=...` manifest defaults. | Extend schema metadata for future manifest-selected settings. |
+| `format_run_result()`/`format_run_summary()` | Older formatting alongside reporters. | Duplicate presentation paths. | Keep as debug helpers or remove in a later formatting cleanup. |
 | Migration docs status split | Historical milestone records and current branch status are mixed in long docs. | Readers can confuse old milestone facts with current status. | Keep `CURRENT_STATE.md` as the current map and split historical/current sections where needed. |
 | `sw.program.image` expected outputs | Claims data-memory image artifact. | Current adapter does not produce one. | Align expected outputs with actual produced artifacts. |
 | `ConfigResolver.TOOL_ENV_DEFAULTS` | Name implies discovery but no discovery occurs. | Misleading abstraction. | Rename or implement real discovery later. |
@@ -558,13 +556,19 @@ Current limitation:
 
 ### Milestone 20 — source-of-truth cleanup
 
-Scope:
+Status: partially completed by the schema-driven selection/root cleanup milestone.
 
-- Fix stale migration-doc current-status statements.
-- Centralize repo-root resolution.
-- Fix or explicitly document selection override precedence so `--set program=...` cannot silently keep stale program-manifest defaults.
-- Decide fate of `Executor.run()`, `format_run_result()`, and `format_run_summary()`.
-- No behavior change beyond clearer status and root/selection consistency.
+Completed:
+
+- CLI repo root is now computed once and passed to planner, executor, and cleaner without adding a new helper file.
+- Manifest-selecting settings are declared through `SettingSpec.manifest_dir`, avoiding hardcoded selector-key sets.
+- CLI selection overrides such as `--set program=nbody` now load the selected manifest defaults before final CLI precedence.
+- The obsolete direct `Executor.run()` API was removed; graph execution through `run_plan()` is the only executor run path.
+
+Remaining cleanup:
+
+- Decide whether `format_run_result()` and `format_run_summary()` remain debug helpers or move/retire later.
+- Continue splitting historical/current documentation where it still causes confusion.
 
 ### Milestone 21 — declarative artifact specs
 

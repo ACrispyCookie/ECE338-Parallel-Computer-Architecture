@@ -127,14 +127,16 @@ def main(argv: list[str] | None = None) -> int:
     color = should_color(args.color)
 
     try:
+        resolver = ConfigResolver()
+        root = resolver.repo_root
         if args.command == "list":
-            config = ConfigResolver().resolve()
-            planner = Planner(config)
+            config = resolver.resolve()
+            planner = Planner(config, repo_root=root)
             print(format_goal_list(planner.list_goals(include_internal=args.internal), color=color))
             return 0
 
-        config = ConfigResolver().resolve(profile=args.profile, set_values=args.set_values)
-        plan = Planner(config).plan(args.goal)
+        config = resolver.resolve(profile=args.profile, set_values=args.set_values)
+        plan = Planner(config, repo_root=root).plan(args.goal)
 
         if args.command == "plan":
             print(format_plan(plan, color=color, verbose=args.verbose))
@@ -156,11 +158,11 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "run":
             reporter = make_run_reporter(args.progress, color=color)
-            summary = Executor(config).run_plan(plan, reporter=reporter)
+            summary = Executor(config, repo_root=root).run_plan(plan, reporter=reporter)
             return summary.returncode
 
         if args.command == "clean":
-            summary = Cleaner().clean_plan(plan, deps=args.deps, dry_run=args.dry_run)
+            summary = Cleaner(repo_root=root).clean_plan(plan, deps=args.deps, dry_run=args.dry_run)
             print(format_clean_summary(summary, dry_run=args.dry_run, deps=args.deps))
             return 0
 

@@ -172,22 +172,6 @@ class Executor:
             reporter.plan_finished(summary)  # type: ignore[attr-defined]
         return summary
 
-    def run(self, goal_id: str, *, artifact_identity: str) -> RunResult:
-        adapters = self._adapter_mapping()
-        adapter = adapters.get(goal_id)
-        if adapter is None:
-            raise ExecuteError(f"no executor adapter registered for {goal_id}")
-        node = GoalInstance(
-            goal_id=goal_id,
-            kind="artifact",
-            params=(),
-            identity=artifact_identity,
-            cacheable=True,
-            public=True,
-            description="direct compatibility run",
-        )
-        return adapter(self._context_for(node, {}))  # type: ignore[misc]
-
     def _direct_dependency_identities(
         self,
         node: GoalInstance,
