@@ -203,6 +203,15 @@ class Executor:
         return identities
 
     def _input_paths_for(self, node: GoalInstance) -> tuple[Path, ...]:
+        """Return the current conservative cache-validation input set.
+
+        This is intentionally a temporary software-goal selector, not a
+        general artifact-spec interface. It exists so Milestone 18 can validate
+        cache status without hashing entire program directories or generated
+        outputs. Future milestones should move these input declarations onto
+        goal/artifact metadata next to expected outputs, adapter ownership, and
+        tool-command fingerprints.
+        """
         if not node.goal_id.startswith("sw.program."):
             return ()
         program = str(self.config.get("program"))

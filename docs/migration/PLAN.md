@@ -468,6 +468,41 @@ Expected evidence:
 - adapter-written metadata includes `output_hashes` and `input_hashes`;
 - planner, artifact, executor, cleaner, legacy characterization, and full discovery tests pass.
 
+## Completed reevaluation milestone
+
+### Milestone 19: current build-system/control-plane reevaluation
+
+Objective: pause feature work and document the current state of the control-plane implementation, remaining original mission goals, source-file responsibilities, data structures, execution flow, and transitional/not-clean code.
+
+Deliverable:
+
+```text
+docs/migration/CURRENT_STATE.md
+```
+
+Scope:
+
+- count current registered goals, public/internal split, goal kinds, and adapter coverage;
+- map original mission capabilities to current implementation status;
+- explain every current non-test control-plane source file and the software Makefile backend;
+- document current `list`, `plan`, `explain`, `run`, and `clean` flows;
+- inventory transitional and unclean code paths;
+- recommend cleanup/refactor milestones before deeper hardware/check/demo work.
+
+Non-goals:
+
+- no new adapters;
+- no cache skipping;
+- no Vivado/UART/demo/check implementation;
+- no legacy script deletion;
+- no behavioral refactor.
+
+Expected evidence:
+
+- report is based on current source files and goal registry, not tests;
+- `gpgpu list --internal` and representative `plan` commands still work;
+- full test discovery passes because documentation-only changes should not alter behavior.
+
 ## Dependency execution policy
 
 Dependencies are declared in `tools/gpgpu/goals.py` on `GoalDefinition.dependencies`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
@@ -578,12 +613,14 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-1. Consider tool-version and command-fingerprint validation before execution skipping.
-2. Consider cache-aware `gpgpu run` only after validation semantics are explicit enough for the chosen goals.
-3. Consider `test.program` as a check goal for native-vs-image comparison.
-4. Connect RTL test goals behind adapters only after characterization.
-5. Connect UART/board action goals behind explicit hardware-state policies.
-6. Connect Vivado/Zynq bitstream goals after a reproducible flow is specified.
+Milestone 19 recommends cleaning the foundation before adding more adapters:
+
+1. Source-of-truth cleanup: fix stale current-status docs, centralize repo-root resolution, fix or document selection override precedence, and decide whether transitional executor APIs/formatters stay or go.
+2. Declarative artifact specs: move software input selection out of `Executor._input_paths_for`, declare expected inputs/outputs per artifact goal, and compare expected input sets against recorded metadata.
+3. Strict adapter output contracts: fail adapters when required outputs are missing and replace suffix-based dependency artifact lookup with typed produced artifacts.
+4. Parameter model cleanup for checks/actions/services: fix `test.rtl` and `test.program` parameter handling before adding check adapters.
+5. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
+6. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
 
 ## Rollback
 

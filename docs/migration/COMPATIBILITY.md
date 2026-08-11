@@ -8,9 +8,17 @@ Existing scripts are compatibility interfaces, behavioral references, regression
 
 ## Current compatibility status
 
-No legacy command has been replaced yet.
+No legacy script has been retired or deleted by the control-plane migration without explicit approval.
 
-The planner foundation is mock-only and does not execute current workflows. Therefore no legacy-versus-new parity claim is made for execution behavior.
+The current branch is no longer mock-only: `gpgpu run` executes three software artifact compatibility adapters (`sw.program.native`, `sw.program.elf`, and `sw.program.image`) through the existing `sw/programs/Makefile`. Hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only or legacy-only unless a later section says otherwise.
+
+No broad legacy-versus-new parity claim is made beyond the explicitly characterized software adapter behavior recorded below.
+
+For the current implementation inventory and cleanup map, see:
+
+```text
+docs/migration/CURRENT_STATE.md
+```
 
 ## Milestone 6 safe characterization evidence
 

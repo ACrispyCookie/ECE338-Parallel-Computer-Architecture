@@ -193,5 +193,16 @@ Accepted Milestone 18 direction:
 - A validated hit requires matching goal/identity metadata, expected output files, matching output hashes, matching explicit input hashes, and matching direct dependency identities.
 - Successful artifact runs record produced output hashes in `artifact.toml`.
 - Current software artifact goals record explicit input hashes for `sw/programs/Makefile` and selected files under `sw/programs/<program>/` such as C/header/assembly/linker-script files and `fpga.py`.
+- The current input selection is implemented by `Executor._input_paths_for` as a transitional, conservative software-goal selector; it is not intended to be the long-term artifact-spec interface.
+- Future milestones should move input declarations into goal/artifact metadata alongside expected outputs, adapter ownership, tool-command fingerprints, and eventually tool-version validation.
 - `gpgpu run` still executes adapters even when plan reports a validated hit; cache skipping remains deferred.
 - Tool-version validation, command fingerprints, generated config hashes, full artifact specs, artifact injection, and hardware/action/service/check cache semantics remain deferred.
+
+## Current-state reevaluation
+
+Accepted Milestone 19 direction:
+
+- The current branch has a real planner/executor/artifact foundation plus three software compatibility adapters, but most original hardware, RTL, check, demo, UART, Vivado, and visualization goals remain planned-only.
+- `docs/migration/CURRENT_STATE.md` is the current implementation map for non-test source files, goal coverage, data structures, build-system flow, and transitional-code inventory.
+- Cleanup should precede deeper adapter expansion where the foundation has known ambiguity: repo-root resolution, check-goal params, declarative artifact specs, strict adapter output contracts, and command/tool fingerprints.
+- Transitional implementation pieces should either be documented as temporary or moved into declarative metadata before becoming precedent for hardware/demo/check workflows.
