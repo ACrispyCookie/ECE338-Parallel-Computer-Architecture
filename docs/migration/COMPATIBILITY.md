@@ -272,6 +272,21 @@ Compatibility behavior:
 
 This milestone changes cache-status semantics but not build commands, output filenames, Makefile behavior, or hardware/demo workflows.
 
+## Milestone 24 artifact cache skipping
+
+Milestone 24 changes `gpgpu run` execution policy for validated artifact cache hits.
+
+Compatibility behavior:
+
+- only artifact cache status `hit` is skippable;
+- every other artifact status (`missing`, `unknown`, `incomplete`, `invalid`, `stale`) runs the adapter when execution is required;
+- skipped cache-hit artifacts still expose declared outputs to dependent adapters;
+- action, check, and service goals are not skipped through the artifact cache;
+- unsupported public/check/action/service goals still fail preflight unless the specific node is a validated artifact hit;
+- Makefile commands, output filenames, legacy scripts, and hardware/demo workflows are unchanged.
+
+This milestone means repeated `gpgpu run sw.program.image --set program=nbody` calls will execute the first time, then skip validated cached artifact goals on the next run until inputs, outputs, metadata, params, or dependency identities change.
+
 ## Milestone 8 layout split
 
 The branch intentionally breaks old root `src/`, `host/`, and `programs/` paths to establish explicit hardware/software domains before more adapters are added:

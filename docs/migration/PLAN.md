@@ -632,6 +632,38 @@ Expected evidence:
 - full test discovery passes;
 - smoke plan commands show the new parameter model.
 
+### Milestone 24: artifact cache skipping
+
+Objective: make `gpgpu run` skip already-validated artifact goals while preserving explicit execution for every non-hit status and for non-artifact goals.
+
+Scope:
+
+- treat only planner cache status `hit` as skippable;
+- treat `missing`, `unknown`, `incomplete`, `invalid`, and `stale` as misses that execute adapters;
+- preflight cache-hit artifact nodes as satisfiable without an adapter;
+- reconstruct declared outputs for skipped cache-hit artifacts;
+- pass skipped dependency outputs to downstream adapters by dependency role/output role;
+- keep action, check, and service goals non-cache-skippable;
+- keep internal planner-only artifact skip behavior explicit and unchanged.
+
+Non-goals:
+
+- no command/tool fingerprints;
+- no artifact injection;
+- no new goals or settings;
+- no new adapters;
+- no force-rebuild flag;
+- no hardware/action/service/check cache semantics.
+
+Expected evidence:
+
+- tests prove a validated artifact cache hit does not call its adapter;
+- tests prove cached dependency outputs remain available to dependent adapters;
+- tests prove graph tests are isolated from accidental cache hits;
+- tests prove cache misses still execute adapters;
+- full test discovery passes;
+- smoke run/plan/run sequence shows first run executes and second run skips validated hits.
+
 ## Dependency execution policy
 
 Dependencies are declared in `config/gpgpu/goals.toml` and loaded into typed `GoalDefinition.dependencies` records by `tools/gpgpu/goals.py`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
@@ -742,10 +774,10 @@ Future decision: decide whether typed planner settings are passed into legacy Ma
 
 ## Intended next milestones
 
-After Milestone 23, remaining cleanup should continue toward final cache-safe goals:
+After Milestone 24, continue with production goal/settings cleanup and real adapter expansion:
 
-1. Command/tool fingerprints: record Make command shape and compiler/objdump identities, still reporting-only unless cache skipping is explicitly approved.
-2. Cache execution policy: define and test when artifact goals may be skipped, while action/check/service goals remain explicit.
+1. Create the next actual goal/settings slice with real behavior, not placeholders.
+2. Clean up any goal/schema settings that are not backed by current behavior.
 3. Then resume new adapters: `test.program`, `test.rtl`, UART/board actions, demo services, and Vivado/Zynq bitstream goals in small characterization-backed milestones.
 
 ## Rollback

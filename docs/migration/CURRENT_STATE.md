@@ -103,8 +103,8 @@ That means:
 | `gpgpu run` | Implemented for three software artifact adapters only. |
 | `gpgpu clean` | Implemented for owned artifact directories only. |
 | Artifact metadata | Implemented as `artifact.toml`. |
-| Cache status | Implemented as validated reporting only. |
-| Cache skipping | Not implemented. |
+| Cache status | Implemented as validated reporting. |
+| Cache skipping | Implemented for validated artifact `hit` only; every other artifact state executes. |
 | Artifact injection | Not implemented. |
 
 ## Source-file responsibility map
@@ -236,6 +236,7 @@ Responsibilities:
   - `RunSummary`
 - Preflights a plan against the adapter registry.
 - Runs executable nodes in topological order.
+- Skips artifact adapters when cache status is a validated `hit`.
 - Skips internal planner-only artifact nodes with no adapter.
 - Stops dependents after a failure.
 - Passes dependency artifacts to adapters.
@@ -253,6 +254,7 @@ Current issues:
 - `format_run_result()` and `format_run_summary()` overlap with `reporter.py` and may be legacy debug helpers.
 - Adapter success now requires all declared produced files to exist.
 - Direct dependency outputs are passed by dependency role and output role.
+- Cache-hit artifact outputs are passed to dependents without re-running the producer adapter.
 - Direct dependency identities are still recorded in metadata by goal id, not by dependency role/edge/instance.
 
 ### `tools/gpgpu/adapters/sw_programs.py`
@@ -514,10 +516,11 @@ hit -> CACHE HIT
 anything else -> CACHE MISS
 ```
 
-Current limitation:
+Current execution policy:
 
-- `gpgpu run` ignores cache hit status and always executes adapters.
-- This is intentional until validation is stronger and execution-skip policy is approved.
+- `gpgpu run` skips artifact goals only when their planner cache status is validated `hit`.
+- Every non-hit artifact state (`missing`, `unknown`, `incomplete`, `invalid`, `stale`) is treated as executable miss behavior.
+- Action, check, and service goals are never cache-skipped.
 
 ## Transitional and not-clean code inventory
 
@@ -528,7 +531,7 @@ Current limitation:
 | Artifact specs | Declarative goal-owned specs now live in `config/gpgpu/goals.toml`, removing executor-side software input selection. | Extend specs with typed produced artifacts and command/tool fingerprints later. |
 | `sw.program.*` adapters | Compatibility wrappers over Makefile. | Documented as current compatibility backend. |
 | `hw.board.project` | Mock internal Vivado artifact. | Name/description marks mock. Needs replacement before Vivado work. |
-| `gpgpu run` cache behavior | Plan reports hit but run does not skip. | Documented as deferred. |
+| `gpgpu run` cache behavior | Validated artifact hits skip execution. | Non-hit artifact states execute; action/check/service goals are not cache-skipped. |
 
 ### Transitional or unclean and needing better documentation/cleanup
 
@@ -539,8 +542,6 @@ Current limitation:
 | `artifacts.py` input validation | Validates recorded inputs only. | Newly added inputs may not invalidate old artifacts. | Compare against declarative current input specs. |
 | `artifacts.py` dependency metadata | Keyed by goal id. | Cannot represent two instances of same goal. | Store role/edge/instance identities. |
 | `Executor._direct_dependency_identities()` | Keyed by goal id. | Same multi-instance limitation. | Use dependency roles from `GoalDependency`. |
-| `sw_programs._dependency_artifact()` | Selects dependency artifact by suffix. | Untyped artifact selection is brittle. | Use typed produced artifact records/specs. |
-| `sw_programs._run_make_artifacts()` | Does not fail on missing required outputs. | Successful run can produce incomplete metadata. | Enforce required outputs. |
 | CLI repo-root coordination | CLI computes one repo root via `ConfigResolver` and passes it to planner, executor, and cleaner. | Prevents CLI cache paths from depending on current working directory. | Keep explicit root passing; avoid adding a helper file until path policy grows. |
 | Config manifest selection | `SettingSpec.manifest_dir` declares which settings select manifests. | Avoids hardcoded selector-key sets and fixes `--set program=...` manifest defaults. | Extend schema metadata for future manifest-selected settings. |
 | `format_run_result()`/`format_run_summary()` | Older formatting alongside reporters. | Duplicate presentation paths. | Keep as debug helpers or remove in a later formatting cleanup. |

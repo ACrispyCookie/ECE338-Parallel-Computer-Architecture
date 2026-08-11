@@ -254,3 +254,14 @@ Accepted Milestone 23 direction:
 - Check, action, and service goals also use `params` so plan/explain output describes the normalized operation deterministically.
 - Cache status remains limited to artifact goals; check/action/service goals must not show compact `CACHE HIT`/`CACHE MISS` output.
 - Runtime-vs-artifact-vs-machine-local semantics remain defined by the central setting schema scopes, not by separate per-goal field names.
+
+## Artifact cache execution policy
+
+Accepted Milestone 24 direction:
+
+- `gpgpu run` skips artifact adapters only when the planned artifact status is a validated `hit`.
+- Every artifact status other than `hit` is executable miss behavior and runs the adapter when one is required.
+- Cache-hit artifact outputs are reconstructed from declarative output specs and passed to dependent adapters by dependency role/output role.
+- Action, check, and service goals are never cache-skipped by artifact cache status.
+- Missing public/check/action/service adapters still fail preflight unless the specific artifact node is a validated cache hit.
+- Internal planner-only artifact nodes without adapters keep their existing explicit skipped behavior.

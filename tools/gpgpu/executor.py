@@ -100,7 +100,7 @@ class Executor:
     def run_plan(self, plan: Plan, *, reporter: object | None = None) -> RunSummary:
         adapters = self._adapter_mapping()
         self._preflight(plan, adapters)
-        executable_count = sum(1 for node in plan.nodes if node.goal_id in adapters)
+        executable_count = sum(1 for node in plan.nodes if node.goal_id in adapters and not self._can_skip_cache_hit(node))
         records: list[RunRecord] = []
         dependency_artifacts: dict[str, tuple[ProducedArtifact, ...]] = {}
         dependency_identities: dict[str, str] = {}
@@ -109,6 +109,15 @@ class Executor:
             reporter.plan_started(plan, executable_count)  # type: ignore[attr-defined]
 
         for index, node in enumerate(plan.nodes):
+            if self._can_skip_cache_hit(node):
+                reason = "artifact cache hit"
+                records.append(RunRecord(node=node, status="skipped", reason=reason))
+                dependency_artifacts[node.key] = self._cached_outputs(node)
+                dependency_identities[node.goal_id] = node.identity
+                if reporter is not None:
+                    reporter.goal_skipped(node, reason)  # type: ignore[attr-defined]
+                continue
+
             adapter = adapters.get(node.goal_id)
             if adapter is None:
                 if self._can_skip_missing_adapter(node):
@@ -242,9 +251,17 @@ class Executor:
 
     def _preflight(self, plan: Plan, adapters: Mapping[str, object]) -> None:
         for node in plan.nodes:
+            if self._can_skip_cache_hit(node):
+                continue
             if node.goal_id in adapters or self._can_skip_missing_adapter(node):
                 continue
             raise ExecuteError(f"no executor adapter registered for required goal {node.goal_id}")
+
+    def _can_skip_cache_hit(self, node: GoalInstance) -> bool:
+        return node.kind == "artifact" and node.cache_status is not None and node.cache_status.is_hit
+
+    def _cached_outputs(self, node: GoalInstance) -> tuple[ProducedArtifact, ...]:
+        return resolve_artifact_outputs(artifact_dir(self.repo_root, node), node, self.config)
 
     def _can_skip_missing_adapter(self, node: GoalInstance) -> bool:
         return not node.public and node.kind == "artifact"

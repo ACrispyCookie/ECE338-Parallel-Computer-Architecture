@@ -72,6 +72,16 @@ class ExecutorStructureTests(unittest.TestCase):
 class GraphRunTests(unittest.TestCase):
     program = "nbody"
 
+    def setUp(self):
+        self._clean_program_artifacts()
+
+    def tearDown(self):
+        self._clean_program_artifacts()
+
+    def _clean_program_artifacts(self):
+        for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
+            shutil.rmtree(ROOT / "out" / "artifacts" / goal_id, ignore_errors=True)
+
     def config(self):
         return ConfigResolver().resolve(set_values=[f"program={self.program}"])
 
@@ -163,52 +173,30 @@ class GraphRunTests(unittest.TestCase):
         self.assertEqual(summary.returncode, 0)
         self.assertEqual(seen_elf_path, [artifact_dir(ROOT, plan.nodes[0]) / "nbody.elf"])
 
-    def test_run_plan_still_executes_when_artifact_metadata_exists(self):
-        from tools.gpgpu.artifacts import artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs
+    def test_run_plan_skips_validated_artifact_cache_hit(self):
+        from tools.gpgpu.artifacts import artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs, write_artifact_metadata
 
         config = self.config()
         initial = Planner(config, repo_root=ROOT).plan("sw.program.native")
         out_dir = artifact_dir(ROOT, initial.root)
+        shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.native", ignore_errors=True)
         out_dir.mkdir(parents=True, exist_ok=True)
         outputs = resolve_artifact_outputs(out_dir, initial.root, config)
         for output in outputs:
             output.path.write_text("native output\n", encoding="utf-8")
-        input_paths = resolve_artifact_inputs(ROOT, initial.root, config)
-        (out_dir / "artifact.toml").write_text(
-            "\n".join(
-                [
-                    'goal = "sw.program.native"',
-                    f'identity = "{initial.root.identity}"',
-                    "",
-                    "[produced]",
-                    *[
-                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(out_dir).as_posix())}\ntype = {json.dumps(output.artifact_type)}'
-                        for output in outputs
-                    ],
-                    "",
-                    "[output_hashes]",
-                    *[
-                        f'{json.dumps(output.path.relative_to(out_dir).as_posix())} = "sha256:{hashlib.sha256(output.path.read_bytes()).hexdigest()}"'
-                        for output in outputs
-                    ],
-                    "",
-                    "[input_hashes]",
-                    *[
-                        f'{json.dumps(path.relative_to(ROOT).as_posix())} = "sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"'
-                        for path in input_paths
-                    ],
-                    "",
-                ]
-            ),
-            encoding="utf-8",
+        write_artifact_metadata(
+            out_dir,
+            node=initial.root,
+            produced=outputs,
+            dependency_identities={},
+            input_paths=resolve_artifact_inputs(ROOT, initial.root, config),
+            repo_root=ROOT,
         )
         calls: list[str] = []
 
         def native(context):
             calls.append(context.goal_id)
-            for output in context.declared_outputs.values():
-                output.path.write_text("native\n", encoding="utf-8")
-            return RunResult(goal_id=context.goal_id, command=("fake", "native"), returncode=0, produced=tuple(context.declared_outputs.values()))
+            raise AssertionError("cache-hit artifact adapter should not run")
 
         try:
             plan = Planner(config, repo_root=ROOT).plan("sw.program.native")
@@ -218,7 +206,57 @@ class GraphRunTests(unittest.TestCase):
             shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.native", ignore_errors=True)
 
         self.assertEqual(summary.returncode, 0)
-        self.assertEqual(calls, ["sw.program.native"])
+        self.assertEqual(calls, [])
+        self.assertEqual(summary.completed_count, 0)
+        self.assertEqual(summary.skipped_count, 1)
+        self.assertEqual(summary.records[-1].status, "skipped")
+        self.assertEqual(summary.records[-1].reason, "artifact cache hit")
+
+    def test_cache_hit_dependency_outputs_are_available_to_dependent_adapter(self):
+        from tools.gpgpu.artifacts import artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs, write_artifact_metadata
+
+        config = self.config()
+        initial = Planner(config, repo_root=ROOT).plan("sw.program.elf")
+        elf_dir = artifact_dir(ROOT, initial.root)
+        shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.elf", ignore_errors=True)
+        shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.image", ignore_errors=True)
+        elf_dir.mkdir(parents=True, exist_ok=True)
+        elf_outputs = resolve_artifact_outputs(elf_dir, initial.root, config)
+        for output in elf_outputs:
+            output.path.write_text(f"cached {output.role}\n", encoding="utf-8")
+        write_artifact_metadata(
+            elf_dir,
+            node=initial.root,
+            produced=elf_outputs,
+            dependency_identities={},
+            input_paths=resolve_artifact_inputs(ROOT, initial.root, config),
+            repo_root=ROOT,
+        )
+        calls: list[str] = []
+        seen_elf_path: list[Path] = []
+
+        def elf(context):
+            calls.append(context.goal_id)
+            raise AssertionError("cache-hit dependency adapter should not run")
+
+        def image(context):
+            calls.append(context.goal_id)
+            seen_elf_path.append(context.dependency_outputs["elf"]["elf"].path)
+            for output in context.declared_outputs.values():
+                output.path.write_text(f"{output.role}\n", encoding="utf-8")
+            return RunResult(goal_id=context.goal_id, command=("fake", "image"), returncode=0, produced=tuple(context.declared_outputs.values()))
+
+        try:
+            plan = Planner(config, repo_root=ROOT).plan("sw.program.image")
+            self.assertIn("CACHE HIT", next(line for line in plan.format_plan().splitlines() if "sw.program.elf" in line))
+            summary = Executor(config, adapters={"sw.program.elf": elf, "sw.program.image": image}).run_plan(plan)
+        finally:
+            shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.elf", ignore_errors=True)
+            shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.image", ignore_errors=True)
+
+        self.assertEqual(summary.returncode, 0)
+        self.assertEqual(calls, ["sw.program.image"])
+        self.assertEqual(seen_elf_path, [elf_dir / "nbody.elf"])
 
     def test_run_summary_supports_colorized_status_output(self):
         config = self.config()
