@@ -1,137 +1,111 @@
 [settings.architecture]
 type = "str"
 default = "gpgpu32"
-scope = "shared"
 manifest_dir = "architectures"
 
 [settings.board_type]
 type = "str"
 default = "zynq7000-zedboard"
-scope = "shared"
 manifest_dir = "board_types"
 
 [settings.board]
 type = "str"
 default = "zedboard"
-scope = "machine-local"
 
 [settings.program]
 type = "str"
 default = "nbody"
-scope = "shared"
 manifest_dir = "programs"
 
 [settings.demo]
 type = "str"
 default = "nbody"
-scope = "shared"
 manifest_dir = "demos"
 
 [settings.backend]
 type = "enum"
 choices = ["fake", "fpga-uart"]
 default = "fake"
-scope = "runtime"
 
 [settings.toolchain]
 type = "str"
 default = "riscv-gcc-rv32im-ilp32"
-scope = "shared"
 
 [settings."program.optimization"]
 type = "enum"
 choices = ["O0", "O1", "O2", "O3"]
 default = "O2"
-scope = "artifact"
 
 [settings."program.march"]
 type = "str"
 default = "rv32im"
-scope = "artifact"
 
 [settings."program.mabi"]
 type = "str"
 default = "ilp32"
-scope = "artifact"
 
 [settings."rtl.sp_per_sm"]
 type = "int"
 default = 32
-scope = "artifact"
 
 [settings."rtl.imem_words"]
 type = "int"
 default = 2048
-scope = "artifact"
 
 [settings."rtl.dmem_words"]
 type = "int"
 default = 2048
-scope = "artifact"
 
 [settings."fpga.synth.strategy"]
 type = "str"
 default = "default"
-scope = "artifact"
 
 [settings."fpga.part"]
 type = "str"
 default = "xc7z020clg484-1"
-scope = "artifact"
 
 [settings."board.configure_policy"]
 type = "enum"
 choices = ["if-needed", "always", "never"]
 default = "if-needed"
-scope = "runtime"
 
 [settings."kernel.load_policy"]
 type = "enum"
 choices = ["if-needed", "always", "never"]
 default = "if-needed"
-scope = "runtime"
 
 [settings."kernel.kernel_calls"]
 type = "int"
 default = 1
-scope = "runtime"
 
 [settings."demo.fps"]
 type = "int"
 default = 12
-scope = "runtime"
 
 [settings."demo.dataset"]
 type = "str"
 default = "default"
-scope = "runtime"
 
 [settings."demo.steps_per_frame"]
 type = "int"
 default = 1
-scope = "runtime"
 
 [settings."demo.http_host"]
 type = "str"
 default = "0.0.0.0"
-scope = "runtime"
 
 [settings."demo.http_port"]
 type = "int"
 default = 8765
-scope = "runtime"
 
 [settings."board.port"]
 type = "str"
 default = "/dev/ttyACM0"
-scope = "machine-local"
 
 [settings."uart.baud"]
 type = "int"
 default = 115200
-scope = "machine-local"
 
 [settings."executor.verbosity"]
 type = "int"
 default = 0
-scope = "executor"

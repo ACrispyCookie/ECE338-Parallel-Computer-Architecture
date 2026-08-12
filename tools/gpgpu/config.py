@@ -21,7 +21,6 @@ class SettingSpec:
     key: str
     type_name: str
     default: Any
-    scope: str
     choices: tuple[str, ...] = ()
     manifest_dir: str | None = None
 
@@ -60,8 +59,7 @@ def load_schema(path: str | Path) -> dict[str, SettingSpec]:
     if not isinstance(settings, dict) or not settings:
         raise ConfigError(f"{schema_path}: missing [settings] table")
 
-    allowed_fields = {"type", "choices", "default", "scope", "manifest_dir"}
-    valid_scopes = {"shared", "artifact", "runtime", "machine-local", "executor"}
+    allowed_fields = {"type", "choices", "default", "manifest_dir"}
     valid_types = {"str", "int", "enum"}
     loaded: dict[str, SettingSpec] = {}
     for key, entry in settings.items():
@@ -72,15 +70,12 @@ def load_schema(path: str | Path) -> dict[str, SettingSpec]:
         unknown = set(entry) - allowed_fields
         if unknown:
             raise ConfigError(f"Unknown schema field for {key}: {sorted(unknown)[0]}")
-        for required in ("type", "default", "scope"):
+        for required in ("type", "default"):
             if required not in entry:
                 raise ConfigError(f"Schema setting {key} missing {required}")
         type_name = entry["type"]
         if type_name not in valid_types:
             raise ConfigError(f"Invalid schema type for {key}: {type_name!r}")
-        scope = entry["scope"]
-        if scope not in valid_scopes:
-            raise ConfigError(f"Invalid schema scope for {key}: {scope!r}")
         choices: tuple[str, ...] = ()
         if type_name == "enum":
             raw_choices = entry.get("choices")
@@ -99,7 +94,6 @@ def load_schema(path: str | Path) -> dict[str, SettingSpec]:
             key=key,
             type_name=type_name,
             default=entry["default"],
-            scope=scope,
             choices=choices,
             manifest_dir=manifest_dir,
         )

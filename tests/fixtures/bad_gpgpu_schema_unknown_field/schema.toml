@@ -1,5 +1,4 @@
 [settings.backend]
 type = "str"
 default = "fake"
-scope = "runtime"
 extra = "bad"

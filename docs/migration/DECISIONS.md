@@ -82,13 +82,16 @@ Noted future cleanup candidates:
 - `sw/programs/fpga_run.py`: board kernel runner / program adapter runner.
 - `test/host_uart_tester.py`: hardware-in-the-loop test runner.
 
-## Parameter scopes
+## Setting schema fields
 
-- Shared selection: architecture, platform, board, program, demo, backend, toolchain, variant.
-- Artifact-affecting: RTL parameters, memory sizes, compiler flags, Vivado strategy, FPGA part, source hashes, tool versions.
-- Runtime: demo FPS, dataset, kernel calls, UART timeout, visualization mode.
-- Executor: dry-run, verbosity, parallel jobs, log formatting.
-- Machine-local: UART port, JTAG serial, board IP, local tool paths.
+Accepted current schema fields:
+
+- `type`
+- `default`
+- `choices` for enum settings
+- `manifest_dir` for settings that select manifests
+
+`scope` is intentionally removed from the schema because it was not used by resolution, planning, artifact identity, cache skipping, or execution. Goal instance identity is determined by each goal's declared `params`; machine-local/runtime/artifact distinctions must be represented through explicit goal parameters, local config placement, and goal kind semantics rather than unused labels.
 
 ## Configuration precedence
 
@@ -253,7 +256,7 @@ Accepted Milestone 23 direction:
 - Artifact goals use `params` as the artifact-affecting parameter set for artifact identity.
 - Check, action, and service goals also use `params` so plan/explain output describes the normalized operation deterministically.
 - Cache status remains limited to artifact goals; check/action/service goals must not show compact `CACHE HIT`/`CACHE MISS` output.
-- Runtime-vs-artifact-vs-machine-local semantics remain defined by the central setting schema scopes, not by separate per-goal field names.
+- Runtime-vs-artifact-vs-machine-local behavior is represented by explicit goal `params`, local config placement, and goal kind semantics; schema `scope` labels are removed instead of kept as unused metadata.
 
 ## Artifact cache execution policy
 

@@ -540,7 +540,7 @@ Objective: move substantial control-plane definitions out of Python source and i
 
 Scope:
 
-- `config/gpgpu/schema.toml` declares settings, types, defaults, scopes, enum choices, and manifest selectors;
+- `config/gpgpu/schema.toml` declares settings, types, defaults, enum choices, and manifest selectors;
 - `config/gpgpu/goals.toml` declares goals, params, visibility, dependencies, notes, and artifact input/output specs;
 - `tools/gpgpu/config.py` loads and validates schema TOML instead of owning a hardcoded schema table;
 - `tools/gpgpu/goals.py` loads and validates goal TOML instead of owning a hardcoded goal table;
@@ -620,7 +620,7 @@ Non-goals:
 - no new adapters;
 - no check-result artifact store;
 - no hardware-state probing;
-- no new setting scopes;
+- no schema `scope` field;
 - no legacy script deletion.
 
 Expected evidence:
@@ -764,7 +764,7 @@ tools/gpgpu/config/
 
 Responsibilities:
 
-- `schema.py`: known settings, types, scopes, defaults;
+- `schema.py`: known settings, types, defaults, enum choices, and manifest selectors;
 - `resolver.py`: precedence order and selected-manifest application;
 - `provenance.py`: source labels and explain-format helpers;
 - `toml_loader.py`: TOML reading, flattening, validation;

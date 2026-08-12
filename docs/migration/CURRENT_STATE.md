@@ -138,7 +138,7 @@ Current issues:
 
 Responsibilities:
 
-- Defines typed settings and scopes using `SettingSpec`.
+- Defines typed settings, defaults, enum choices, and manifest selectors using `SettingSpec`.
 - Resolves config from schema defaults, defaults TOML, selected manifests, profiles, local config, tool defaults, and CLI `--set`.
 - Preserves provenance through `Provenance` and `ResolvedConfig`.
 - Rejects unknown settings and type-invalid settings.
@@ -184,7 +184,6 @@ Justification:
 
 Current issues:
 
-- `_params_for()` uses artifact params only for kind `artifact`; check goals currently lose their declared artifact-affecting params.
 - Non-artifact identities are generic strings such as `"service"` or `"check"`, which is weak for future reporting/traceability.
 - CLI passes a shared repo root into the planner so CLI cache paths match run/clean roots; direct `Planner(...)` default still uses `Path.cwd()` for non-CLI use.
 - Artifact identity still does not include tool versions or generated config hashes.

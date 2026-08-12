@@ -110,6 +110,9 @@ class PlannerFoundationTests(unittest.TestCase):
         schema_path = ROOT / "config" / "gpgpu" / "schema.toml"
         self.assertTrue(schema_path.exists())
         self.assertNotIn("SCHEMA: dict[str, SettingSpec] = {", (ROOT / "tools" / "gpgpu" / "config.py").read_text())
+        source = schema_path.read_text()
+        self.assertNotIn("scope =", source)
+        self.assertNotIn("scope:", (ROOT / "tools" / "gpgpu" / "config.py").read_text())
 
     def test_manifest_selectors_are_declared_in_schema(self):
         manifest_selectors = {
@@ -295,17 +298,13 @@ class PlannerFoundationTests(unittest.TestCase):
             ("program", "architecture", "program.optimization"),
         )
 
-    def test_goal_parameter_scopes_are_consistent_with_schema(self):
+    def test_goal_params_reference_known_schema_settings(self):
         from tools.gpgpu.config import ConfigResolver
         from tools.gpgpu.goals import GOALS
 
         for goal in GOALS.values():
             for name in goal.params:
-                self.assertIn(
-                    ConfigResolver.SCHEMA[name].scope,
-                    {"artifact", "shared", "runtime", "machine-local"},
-                    f"{goal.goal_id}:{name}",
-                )
+                self.assertIn(name, ConfigResolver.SCHEMA, f"{goal.goal_id}:{name}")
 
     def test_check_goal_uses_declared_instance_params_in_plan(self):
         plan = self.make_planner("program=nbody", "program.optimization=O3").plan("test.program")
