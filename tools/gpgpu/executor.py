@@ -135,7 +135,16 @@ class Executor:
             if reporter is not None:
                 reporter.goal_started(node, context)  # type: ignore[attr-defined]
             started_at = perf_counter()
-            result = adapter(context)  # type: ignore[misc]
+            try:
+                result = adapter(context)  # type: ignore[misc]
+            except Exception as exc:  # noqa: BLE001 - adapters are goal boundaries; unexpected adapter errors are failed goals.
+                result = RunResult(
+                    goal_id=node.goal_id,
+                    command=("adapter", node.goal_id),
+                    returncode=1,
+                    produced=(),
+                    stderr=str(exc),
+                )
             elapsed = perf_counter() - started_at
             if result.returncode != 0:
                 records.append(RunRecord(node=node, status="failed", result=result))

@@ -321,6 +321,21 @@ class GraphRunTests(unittest.TestCase):
         self.assertIn("STOPPED   sw.program.image", rendered)
         self.assertIn("dependency sw.program.elf failed", rendered)
 
+    def test_adapter_exception_is_reported_as_failed_goal_without_escaping_executor(self):
+        config = self.config()
+        plan = Planner(config).plan("sw.program.native")
+
+        def broken_adapter(context):
+            raise RuntimeError("adapter exploded")
+
+        summary = Executor(config, adapters={"sw.program.native": broken_adapter}).run_plan(plan)
+
+        self.assertEqual(summary.returncode, 1)
+        rendered = format_run_summary(summary, repo_root=ROOT)
+        self.assertIn("FAILED    sw.program.native", rendered)
+        self.assertIn("adapter exploded", rendered)
+        self.assertNotIn("Traceback", rendered)
+
     def test_missing_required_public_adapter_fails_before_dependencies_run(self):
         config = self.config()
         plan = Planner(config).plan("test.program")
@@ -571,6 +586,52 @@ class ProgramAdapterTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "unknown ABI template variable 'architecture.rtl.thread.typo'"):
                 sw_abi._render_template(template, sw_abi._template_variables(model))
+
+    def test_sw_abi_template_renderer_accepts_resolved_config_values(self):
+        from tools.gpgpu.adapters import sw_abi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            template = Path(tmp) / "resolved_setting.in"
+            template.write_text("sp=${architecture.rtl.sp_per_sm}\n", encoding="utf-8")
+            config = ConfigResolver().resolve()
+            model = sw_abi.AbiModel(
+                architecture="gpgpu32",
+                word_bytes=4,
+                thread_count=32,
+                thread_id_register="x31",
+                imem_origin=0,
+                imem_words=2048,
+                dmem_origin=0,
+                dmem_words=2048,
+                args_base_word=16,
+                args_words=4,
+                data_base_word=1024,
+                stack_per_lane_bytes=64,
+                stack_top_word=2048,
+            )
+
+            rendered = sw_abi._render_template(template, sw_abi._template_variables(model, config.values))
+
+        self.assertEqual(rendered, "sp=32\n")
+
+    def test_sw_abi_unknown_template_variable_fails_cli_without_traceback(self):
+        from tools.gpgpu.adapters import sw_abi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bad_template = Path(tmp) / "bad_runtime.h.in"
+            bad_template.write_text("value=${architecture.rtl.thread.typo}\n", encoding="utf-8")
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with mock.patch.object(sw_abi, "_RUNTIME_HEADER_TEMPLATE", bad_template):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    code = main(["--color", "never", "run", "sw.abi", "--progress", "plain"])
+
+        rendered = stdout.getvalue() + stderr.getvalue()
+        self.assertEqual(code, 1, rendered)
+        self.assertIn("✗ sw.abi", rendered)
+        self.assertIn("unknown ABI template variable 'architecture.rtl.thread.typo'", rendered)
+        self.assertNotIn("Traceback", rendered)
 
     def test_sw_abi_adapter_does_not_embed_generated_header_or_linker_body(self):
         source = (ROOT / "tools" / "gpgpu" / "adapters" / "sw_abi.py").read_text(encoding="utf-8")

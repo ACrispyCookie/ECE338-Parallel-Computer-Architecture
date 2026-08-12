@@ -87,17 +87,13 @@ class AbiModel:
 def run_sw_abi(context: ExecutionContext) -> RunResult:
     model = _model_from_context(context)
     _validate(model)
-    variables = _template_variables(model)
+    variables = _template_variables(model, context.config.values)
+    runtime_header = _render_template(context.repo_root / _RUNTIME_HEADER_TEMPLATE, variables)
+    linker_script = _render_template(context.repo_root / _LINKER_SCRIPT_TEMPLATE, variables)
 
     outputs = context.declared_outputs
-    outputs["runtime_header"].path.write_text(
-        _render_template(context.repo_root / _RUNTIME_HEADER_TEMPLATE, variables),
-        encoding="utf-8",
-    )
-    outputs["linker_script"].path.write_text(
-        _render_template(context.repo_root / _LINKER_SCRIPT_TEMPLATE, variables),
-        encoding="utf-8",
-    )
+    outputs["runtime_header"].path.write_text(runtime_header, encoding="utf-8")
+    outputs["linker_script"].path.write_text(linker_script, encoding="utf-8")
     outputs["metadata"].path.write_text(json.dumps(_metadata(model), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     return RunResult(
@@ -156,8 +152,9 @@ def _length(value: int) -> str:
     return f"{value // 1024}K" if value % 1024 == 0 else str(value)
 
 
-def _template_variables(model: AbiModel) -> dict[str, str]:
-    return {
+def _template_variables(model: AbiModel, resolved_values: Mapping[str, object] | None = None) -> dict[str, str]:
+    variables = {key: str(value) for key, value in (resolved_values or {}).items()}
+    variables.update({
         "architecture": model.architecture,
         "architecture.rtl.thread.count": str(model.thread_count),
         "architecture.rtl.thread.id_register": model.thread_id_register,
@@ -196,7 +193,8 @@ def _template_variables(model: AbiModel) -> dict[str, str]:
         "architecture.abi.stack.bottom_word": str(model.stack_bottom_word),
         "architecture.abi.stack.bottom_byte": str(model.stack_bottom_byte),
         "architecture.abi.stack.bottom_byte.hex": _hex(model.stack_bottom_byte),
-    }
+    })
+    return variables
 
 
 def _render_template(path: Path, variables: Mapping[str, str]) -> str:
