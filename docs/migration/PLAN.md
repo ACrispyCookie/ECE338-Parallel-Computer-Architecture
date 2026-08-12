@@ -565,16 +565,16 @@ Expected evidence:
 - full test discovery passes;
 - smoke run/plan/explain/clean cycle still works.
 
-### Milestone 22: strict typed artifact output contracts
+### Milestone 22: strict artifact output contracts
 
 Objective: tighten the artifact interface before cache skipping by making declared outputs role-addressable and enforcing that successful adapters actually produce them.
 
 Scope:
 
-- keep the output data model intentionally small: role, path, and type;
-- declare software artifact outputs in `config/goals.yaml` as typed output tables;
-- record produced outputs in `artifact.toml` under `[produced.<role>]` with path and type;
-- validate output role/path/type declarations during cache-status checks;
+- keep the output data model intentionally small: role, description, and path;
+- declare software artifact outputs in `config/goals.yaml` as output tables;
+- record produced outputs in `artifact.toml` under `[produced.<role>]` with path;
+- validate output role/path declarations during cache-status checks;
 - require declared outputs to exist after adapter success before a run is recorded as successful;
 - pass dependency outputs to adapters by dependency goal id and output role;
 - update `sw.program.image` to consume the declared ELF dependency output rather than scanning paths by suffix.
@@ -591,7 +591,7 @@ Non-goals:
 
 Expected evidence:
 
-- tests cover typed output declaration loading and invalid output specs;
+- tests cover output declaration loading and invalid output specs;
 - tests cover `artifact.toml` output metadata shape;
 - tests cover cache miss/stale behavior for output declaration drift;
 - tests cover adapter-success-with-missing-output failure;

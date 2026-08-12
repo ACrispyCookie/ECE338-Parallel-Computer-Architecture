@@ -14,4 +14,3 @@ goals:
             elf:
               description: bad output
               path: '{program}.elf'
-              type: riscv-elf

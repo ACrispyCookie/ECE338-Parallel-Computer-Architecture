@@ -11,7 +11,7 @@ This document reevaluates the current `gpgpu` control-plane implementation after
 
 ## Executive summary
 
-The repository now has a working typed goal planner, config resolver, graph executor, progress reporters, artifact layout/metadata helpers, conservative artifact cleaner, validated cache-status reporting, declarative goal/artifact specs, strict typed artifact output contracts, and a generated software ABI artifact. Executable adapters currently cover `sw.abi` plus the software-program artifact adapters around the existing `sw/programs/Makefile`.
+The repository now has a working typed goal planner, config resolver, graph executor, progress reporters, artifact layout/metadata helpers, conservative artifact cleaner, validated cache-status reporting, declarative goal/artifact specs, strict role/path artifact output contracts, and a generated software ABI artifact. Executable adapters currently cover `sw.abi` plus the software-program artifact adapters around the existing `sw/programs/Makefile`.
 
 The foundation is useful, but it is not yet a complete build system for the original project mission. Most hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only.
 

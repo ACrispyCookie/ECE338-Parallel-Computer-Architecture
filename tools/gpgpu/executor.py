@@ -218,7 +218,7 @@ class Executor:
         canonical: list[ProducedArtifact] = []
         for role, expected in declared.items():
             artifact = produced_by_role.get(role, expected)
-            if artifact.path.resolve() != expected.path.resolve() or artifact.artifact_type != expected.artifact_type:
+            if artifact.path.resolve() != expected.path.resolve():
                 return (), f"declared output mismatch: {role} -> {_display_path(expected.path, context.artifact_dir)}"
             if not expected.path.exists():
                 return (), f"declared output missing: {role} -> {_display_path(expected.path, context.artifact_dir)}"

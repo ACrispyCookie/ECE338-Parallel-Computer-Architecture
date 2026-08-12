@@ -25,15 +25,12 @@ goals:
           runtime_header:
             description: generated GPGPU runtime header
             path: gpgpu_runtime.h
-            type: c-header
           linker_script:
             description: generated GPGPU linker script
             path: gpgpu.ld
-            type: linker-script
           metadata:
             description: generated GPGPU ABI metadata
             path: gpgpu_abi.json
-            type: architecture-abi-metadata
     program:
       native:
         kind: artifact
@@ -51,7 +48,6 @@ goals:
             executable:
               description: native reference executable artifact
               path: '{program}_x86'
-              type: native-executable
       elf:
         kind: artifact
         public: true
@@ -75,11 +71,9 @@ goals:
             elf:
               description: RISC-V ELF artifact
               path: '{program}.elf'
-              type: riscv-elf
             map:
               description: linker map artifact
               path: '{program}.map'
-              type: linker-map
         dependencies:
         - goal: sw.abi
       image:
@@ -105,11 +99,9 @@ goals:
             imem:
               description: instruction-memory image artifact
               path: '{program}_instructions.mem'
-              type: instruction-memory
             objdump:
               description: objdump artifact
               path: '{program}_dump_real.asm'
-              type: objdump
         dependencies:
         - goal: sw.program.elf
   hw:

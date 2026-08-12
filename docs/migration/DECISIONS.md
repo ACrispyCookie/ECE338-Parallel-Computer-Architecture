@@ -230,21 +230,21 @@ Accepted Milestone 21 direction:
 - Python owns typed dataclasses, YAML loading, validation, planning, execution, and artifact/cache algorithms.
 - Artifact validation compares recorded metadata against the current declarative input/output spec before trusting hashes.
 - `Executor._input_paths_for()` is removed; software input selection is no longer hardcoded in the executor.
-- Artifact output descriptions live under each `artifact.outputs.<name>` entry beside `path` and `type`; top-level `expected_outputs` is not used for declarative goals.
+- Artifact output descriptions live under each `artifact.outputs.<name>` entry beside `path`; top-level `expected_outputs` is not used for declarative goals.
 
-## Strict typed artifact output contracts
+## Strict artifact output contracts
 
 Accepted Milestone 22 direction:
 
-- Keep the artifact output model minimal: `role`, `path`, and `type`.
+- Keep the artifact output model minimal: `role`, `description`, and `path`.
 - Output roles are stable interface names used by consumers and metadata.
 - Output paths describe the current storage location relative to the artifact directory.
-- Output types are semantic compatibility strings such as `riscv-elf`, `linker-map`, `instruction-memory`, `objdump`, and `native-executable`; there is no type registry yet.
-- Successful artifact metadata records produced outputs under `[produced.<role>]` with `path` and `type`, not as a loose `produced.files` list.
-- Cache validation treats output role, path, or type drift as a miss/stale condition before trusting hashes.
+- Output type strings are removed; real compatibility validation should be implemented later with concrete metadata or file validators when needed.
+- Successful artifact metadata records produced outputs under `[produced.<role>]` with `path`, not as a loose `produced.files` list.
+- Cache validation treats output role or path drift as a miss/stale condition before trusting hashes.
 - An artifact adapter returning success is not sufficient: the executor requires every declared output to exist before recording the run as successful.
 - Dependency artifact consumption uses dependency goal id plus output role, for example `dependency_outputs["sw.program.elf"]["elf"]`, rather than filename suffix guessing.
-- `sw.program.image` consumes the `sw.program.elf` dependency through its declared `elf` output of type `riscv-elf`.
+- `sw.program.image` consumes the `sw.program.elf` dependency through its declared `elf` output role.
 
 ## Generated software ABI artifact
 

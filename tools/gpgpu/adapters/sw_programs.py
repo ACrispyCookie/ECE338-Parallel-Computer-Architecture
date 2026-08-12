@@ -21,8 +21,8 @@ def run_native(context: ExecutionContext) -> RunResult:
 
 def run_elf(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    abi_dir = _dependency_output(context, "sw.abi", "runtime_header", artifact_type="c-header").parent
-    linker_script = _dependency_output(context, "sw.abi", "linker_script", artifact_type="linker-script")
+    abi_dir = _dependency_output(context, "sw.abi", "runtime_header").parent
+    linker_script = _dependency_output(context, "sw.abi", "linker_script")
     command = _make_command(
         program,
         context.artifact_dir,
@@ -40,7 +40,7 @@ def run_elf(context: ExecutionContext) -> RunResult:
 
 def run_image(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    elf_path = _dependency_output(context, "sw.program.elf", "elf", artifact_type="riscv-elf")
+    elf_path = _dependency_output(context, "sw.program.elf", "elf")
     command = _make_command(program, context.artifact_dir, "image", extra=(f"ELF_IN={elf_path}",))
     return _run_make_artifacts(
         goal_id=context.goal_id,
@@ -55,14 +55,10 @@ def _make_command(program: str, out_dir: Path, target: str, *, extra: tuple[str,
     return ("make", "-C", "sw/programs", f"PROG={program}", f"OUT_DIR={out_dir}", *extra, target)
 
 
-def _dependency_output(context: ExecutionContext, dependency_goal_id: str, output_role: str, *, artifact_type: str) -> Path:
+def _dependency_output(context: ExecutionContext, dependency_goal_id: str, output_role: str) -> Path:
     artifact = context.dependency_outputs.get(dependency_goal_id, {}).get(output_role)
     if artifact is None:
         raise ExecuteError(f"{context.goal_id} requires dependency {dependency_goal_id}.{output_role}")
-    if artifact.artifact_type != artifact_type:
-        raise ExecuteError(
-            f"{context.goal_id} requires {dependency_goal_id}.{output_role} type {artifact_type}, got {artifact.artifact_type}"
-        )
     return artifact.path
 
 

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 class ProducedArtifact:
     role: str
     path: Path
-    artifact_type: str
 
 
 @dataclass(frozen=True)
@@ -67,7 +66,7 @@ def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactS
         recorded_outputs = {
             role: entry
             for role, entry in produced.items()
-            if isinstance(role, str) and isinstance(entry, dict) and "path" in entry and "type" in entry
+            if isinstance(role, str) and isinstance(entry, dict) and "path" in entry
         }
         if set(recorded_outputs) != set(expected_outputs):
             missing = sorted(set(expected_outputs) - set(recorded_outputs))
@@ -79,7 +78,7 @@ def read_artifact_status(repo_root: str | Path, node: GoalInstance) -> ArtifactS
         for role, expected in expected_outputs.items():
             recorded = recorded_outputs[role]
             expected_path = _display_path(expected.path, directory)
-            if recorded.get("path") != expected_path or recorded.get("type") != expected.artifact_type:
+            if recorded.get("path") != expected_path:
                 return ArtifactStatus("stale", directory, f"output declaration changed: {role}")
 
     expected_inputs = {_display_path(path, root) for path in resolve_artifact_inputs(root, node)}
@@ -153,7 +152,6 @@ def resolve_artifact_outputs(
         ProducedArtifact(
             role=spec.role,
             path=root / spec.path_template.format_map(params),
-            artifact_type=spec.artifact_type,
         )
         for spec in goal.artifact.outputs
     )
@@ -211,8 +209,7 @@ def _render_artifact_metadata(
             [
                 "",
                 f"[produced.{_toml_key(artifact.role)}]",
-                f"path = {_toml_value(_display_path(artifact.path, directory))}",
-                f"type = {_toml_value(artifact.artifact_type)}",
+                f"path = {_toml_value(artifact.path.relative_to(directory).as_posix())}",
             ]
         )
     lines.extend(["", "[output_hashes]"])

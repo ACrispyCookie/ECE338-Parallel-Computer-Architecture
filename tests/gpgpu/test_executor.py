@@ -609,7 +609,7 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["goal"], "sw.program.native")
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
-        self.assertEqual(metadata["produced"]["executable"], {"path": f"{self.program}_x86", "type": "native-executable"})
+        self.assertEqual(metadata["produced"]["executable"], {"path": f"{self.program}_x86"})
         self.assertIn(f"{self.program}_x86", metadata["output_hashes"])
         self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
         self.assertIn(f"sw/programs/{self.program}/nbody.c", metadata["input_hashes"])
@@ -658,8 +658,8 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["goal"], "sw.program.elf")
         self.assertEqual(metadata["identity"], out_dir.name)
         self.assertEqual(metadata["params"]["program"], self.program)
-        self.assertEqual(metadata["produced"]["elf"], {"path": f"{self.program}.elf", "type": "riscv-elf"})
-        self.assertEqual(metadata["produced"]["map"], {"path": f"{self.program}.map", "type": "linker-map"})
+        self.assertEqual(metadata["produced"]["elf"], {"path": f"{self.program}.elf"})
+        self.assertEqual(metadata["produced"]["map"], {"path": f"{self.program}.map"})
         self.assertIn(f"{self.program}.elf", metadata["output_hashes"])
         self.assertIn(f"{self.program}.map", metadata["output_hashes"])
         self.assertIn("sw/programs/Makefile", metadata["input_hashes"])
@@ -703,11 +703,11 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["params"]["program"], self.program)
         self.assertEqual(
             metadata["produced"]["imem"],
-            {"path": f"{self.program}_instructions.mem", "type": "instruction-memory"},
+            {"path": f"{self.program}_instructions.mem"},
         )
         self.assertEqual(
             metadata["produced"]["objdump"],
-            {"path": f"{self.program}_dump_real.asm", "type": "objdump"},
+            {"path": f"{self.program}_dump_real.asm"},
         )
         self.assertEqual(metadata["dependencies"]["sw.program.elf"], elf_dir.name)
         self.assertIn(f"{self.program}_instructions.mem", metadata["output_hashes"])

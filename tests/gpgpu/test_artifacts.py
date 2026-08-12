@@ -61,7 +61,7 @@ class ArtifactValidationTests(unittest.TestCase):
                 [
                     "[produced]",
                     *[
-                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(self.directory).as_posix())}\ntype = {json.dumps(output.artifact_type)}'
+                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(self.directory).as_posix())}'
                         for output in outputs
                     ],
                     "",
@@ -122,11 +122,9 @@ class ArtifactValidationTests(unittest.TestCase):
 
         self.assertEqual(set(by_role), {"elf", "map"})
         self.assertEqual(by_role["elf"].path.relative_to(self.directory).as_posix(), "nbody.elf")
-        self.assertEqual(by_role["elf"].artifact_type, "riscv-elf")
         self.assertEqual(by_role["map"].path.relative_to(self.directory).as_posix(), "nbody.map")
-        self.assertEqual(by_role["map"].artifact_type, "linker-map")
 
-    def test_artifact_metadata_records_produced_roles_types_and_paths(self):
+    def test_artifact_metadata_records_produced_roles_and_paths(self):
         outputs = resolve_artifact_outputs(self.directory, self.node, self.config)
         for output in outputs:
             output.path.write_text(f"contents for {output.role}\n", encoding="utf-8")
@@ -142,8 +140,8 @@ class ArtifactValidationTests(unittest.TestCase):
 
         with (self.directory / "artifact.toml").open("rb") as handle:
             metadata = tomllib.load(handle)
-        self.assertEqual(metadata["produced"]["elf"], {"path": "nbody.elf", "type": "riscv-elf"})
-        self.assertEqual(metadata["produced"]["map"], {"path": "nbody.map", "type": "linker-map"})
+        self.assertEqual(metadata["produced"]["elf"], {"path": "nbody.elf"})
+        self.assertEqual(metadata["produced"]["map"], {"path": "nbody.map"})
 
     def test_new_matching_input_file_makes_old_metadata_stale(self):
         self.write_validated_metadata()
@@ -166,7 +164,6 @@ class ArtifactValidationTests(unittest.TestCase):
                 [
                     "[produced.elf]",
                     'path = "nbody.elf"',
-                    'type = "riscv-elf"',
                     "",
                     "[output_hashes]",
                     f'"nbody.elf" = "{_sha256_for_test(output)}"',
@@ -257,7 +254,7 @@ class ArtifactValidationTests(unittest.TestCase):
                     "",
                     "[produced]",
                     *[
-                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(image_dir).as_posix())}\ntype = {json.dumps(output.artifact_type)}'
+                        f'\n[produced.{json.dumps(output.role)}]\npath = {json.dumps(output.path.relative_to(image_dir).as_posix())}'
                         for output in outputs
                     ],
                     "",

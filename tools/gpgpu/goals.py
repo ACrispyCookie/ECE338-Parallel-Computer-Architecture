@@ -22,7 +22,6 @@ class ArtifactOutputSpec:
     role: str
     description: str
     path_template: str
-    artifact_type: str
 
 
 @dataclass(frozen=True)
@@ -258,20 +257,17 @@ def _load_artifact_outputs(
             raise GoalConfigError(f"Invalid artifact output role for {goal_id}: {role!r}")
         if not isinstance(entry, dict):
             raise GoalConfigError(f"Goal {goal_id} artifact output {role} must be a table")
-        unknown = set(entry) - {"description", "path", "type"}
+        unknown = set(entry) - {"description", "path"}
         if unknown:
             raise GoalConfigError(f"Unknown artifact output field for {goal_id}.{role}: {sorted(unknown)[0]}")
         description = entry.get("description")
         path_template = entry.get("path")
-        artifact_type = entry.get("type")
         if not isinstance(description, str) or not description:
             raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing description")
         if not isinstance(path_template, str) or not path_template:
             raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing path")
-        if not isinstance(artifact_type, str) or not artifact_type:
-            raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing type")
         _validate_artifact_path_template(path_template, schema=schema)
-        outputs.append(ArtifactOutputSpec(role=role, description=description, path_template=path_template, artifact_type=artifact_type))
+        outputs.append(ArtifactOutputSpec(role=role, description=description, path_template=path_template))
     return outputs
 
 

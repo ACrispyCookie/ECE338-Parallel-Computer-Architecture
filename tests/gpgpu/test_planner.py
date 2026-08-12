@@ -59,7 +59,6 @@ class PlannerFoundationTests(unittest.TestCase):
                 output.path.write_text(f"validated output for {output.path.name}\n", encoding="utf-8")
                 handle.write(f'\n[produced.{json.dumps(output.role)}]\n')
                 handle.write(f'path = {json.dumps(output.path.relative_to(directory).as_posix())}\n')
-                handle.write(f'type = {json.dumps(output.artifact_type)}\n')
             handle.write("\n[output_hashes]\n")
             for output in outputs:
                 output_hash = hashlib.sha256(output.path.read_bytes()).hexdigest()
