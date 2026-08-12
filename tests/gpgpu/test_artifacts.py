@@ -186,14 +186,14 @@ class ArtifactValidationTests(unittest.TestCase):
     def test_absolute_artifact_spec_path_is_rejected(self):
         from tools.gpgpu.goals import GoalConfigError, load_goals
 
-        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_absolute_artifact_path" / "goals.toml"
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_absolute_artifact_path" / "goals.yaml"
         with self.assertRaisesRegex(GoalConfigError, "artifact paths must be repository-relative"):
             load_goals(fixture, schema=ConfigResolver.SCHEMA)
 
     def test_unknown_artifact_placeholder_is_rejected(self):
         from tools.gpgpu.goals import GoalConfigError, load_goals
 
-        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_placeholder" / "goals.toml"
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_placeholder" / "goals.yaml"
         with self.assertRaisesRegex(GoalConfigError, "Unknown artifact placeholder"):
             load_goals(fixture, schema=ConfigResolver.SCHEMA)
 

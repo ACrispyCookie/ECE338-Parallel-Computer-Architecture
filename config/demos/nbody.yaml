@@ -1,0 +1,6 @@
+defaults:
+  demo:
+    name: nbody
+    fps: 12
+    dataset: default
+    steps_per_frame: 1

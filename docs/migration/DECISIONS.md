@@ -103,7 +103,7 @@ Accepted initial order excludes artifact injection:
 4. Selected architecture/platform/program/demo manifests.
 5. Goal defaults for values still unset by higher-specificity files.
 6. Named profile overrides.
-7. Gitignored machine-local config, or `local.example.toml` fallback for the mock planner.
+7. Gitignored machine-local config, or `local.example.yaml` fallback for the mock planner.
 8. Environment variables for tool discovery only.
 9. CLI convenience flags.
 10. CLI `--set namespace.key=value`.
@@ -216,7 +216,7 @@ Accepted Milestone 20 direction:
 
 - Avoid adding new files for small conveniences; repo-root consistency is handled by explicit CLI root passing through existing planner/executor/cleaner constructors.
 - Manifest-selection behavior is declared by `SettingSpec.manifest_dir`, not by a hardcoded resolver key set.
-- CLI selection overrides for manifest-selecting settings are applied before selected manifests so `--set program=nbody` loads `config/gpgpu/programs/nbody.toml`; all CLI overrides are then applied again at final precedence.
+- CLI selection overrides for manifest-selecting settings are applied before selected manifests so `--set program=nbody` loads `config/programs/nbody.yaml`; all CLI overrides are then applied again at final precedence.
 - Explicit setting overrides still win at final precedence, e.g. `--set program=nbody --set program.optimization=O3` yields `O3` from `CLI --set`.
 - Direct single-goal `Executor.run()` is removed; graph execution through `Executor.run_plan()` is the supported execution path.
 
@@ -225,9 +225,9 @@ Accepted Milestone 20 direction:
 Accepted Milestone 21 direction:
 
 - Substantial control-plane definitions belong in declarative project data rather than embedded Python tables.
-- `config/gpgpu/schema.toml` owns setting definitions, including enum choices and manifest-selection metadata.
-- `config/gpgpu/goals.toml` owns goal definitions, dependencies, conditional notes, and artifact input/output specs.
-- Python owns typed dataclasses, TOML loading, validation, planning, execution, and artifact/cache algorithms.
+- `config/schema.yaml` owns setting definitions, including enum choices and manifest-selection metadata.
+- `config/goals.yaml` owns goal definitions, dependencies, conditional notes, and artifact input/output specs.
+- Python owns typed dataclasses, YAML loading, validation, planning, execution, and artifact/cache algorithms.
 - Artifact validation compares recorded metadata against the current declarative input/output spec before trusting hashes.
 - `Executor._input_paths_for()` is removed; software input selection is no longer hardcoded in the executor.
 - `sw.program.image` expected outputs describe current adapter reality: instruction-memory image and objdump artifact.

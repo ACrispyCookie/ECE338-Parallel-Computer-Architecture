@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import re
 import string
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
+
+import yaml
 
 from .config import SettingSpec
 
@@ -68,16 +69,18 @@ class GoalDefinition:
 
 
 def _default_goals_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "config" / "gpgpu" / "goals.toml"
+    return Path(__file__).resolve().parents[2] / "config" / "goals.yaml"
 
 
 def load_goals(path: str | Path, *, schema: Mapping[str, SettingSpec]) -> dict[str, GoalDefinition]:
     goals_path = Path(path)
     try:
         with goals_path.open("rb") as handle:
-            data = tomllib.load(handle)
-    except tomllib.TOMLDecodeError as exc:
-        raise GoalConfigError(f"Invalid TOML in {goals_path}: {exc}") from exc
+            data = yaml.safe_load(handle)
+    except yaml.YAMLError as exc:
+        raise GoalConfigError(f"Invalid YAML in {goals_path}: {exc}") from exc
+    if data is None:
+        data = {}
     goals_data = data.get("goals")
     if not isinstance(goals_data, dict) or not goals_data:
         raise GoalConfigError(f"{goals_path}: missing [goals] table")

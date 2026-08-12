@@ -1,0 +1,3 @@
+defaults:
+  demo:
+    fps: fast

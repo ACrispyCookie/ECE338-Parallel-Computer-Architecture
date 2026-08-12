@@ -1,0 +1,14 @@
+goals:
+  sw.program.elf:
+    kind: artifact
+    public: true
+    description: bad
+    params:
+    - program
+    artifact:
+      input_globs:
+      - sw/programs/{missing}/*.c
+      outputs:
+        elf:
+          path: '{program}.elf'
+          type: riscv-elf

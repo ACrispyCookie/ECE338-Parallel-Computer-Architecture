@@ -1,3 +1,0 @@
-[settings.backend]
-type = "enum"
-default = "fake"

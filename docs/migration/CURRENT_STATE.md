@@ -19,8 +19,8 @@ Most important cleanup findings after Milestone 23:
 
 1. Dependency identities are still recorded in metadata by goal id, which will not handle multiple instances of the same goal.
 2. `implementation_version = "mock-v1"` is still the default for artifact identity, even for real software adapters.
-3. Configuration schema now lives in `config/gpgpu/schema.toml`; Python loads and validates it.
-4. Goal/dependency/artifact definitions now live in `config/gpgpu/goals.toml`; Python loads and validates them.
+3. Configuration schema now lives in `config/schema.yaml`; Python loads and validates it.
+4. Goal/dependency/artifact definitions now live in `config/goals.yaml`; Python loads and validates them.
 5. Artifact cache validation now compares current declarative input/output specs against recorded metadata, so newly added matching source files invalidate old artifacts.
 6. CLI selection settings are schema-declared manifest selectors and CLI passes one repo root into planner, executor, and cleaner.
 7. Software adapters now fail if `make` returns success but a declared output is missing.
@@ -139,7 +139,7 @@ Current issues:
 Responsibilities:
 
 - Defines typed settings, defaults, enum choices, and manifest selectors using `SettingSpec`.
-- Resolves config from schema defaults, defaults TOML, selected manifests, profiles, local config, tool defaults, and CLI `--set`.
+- Resolves config from schema defaults, defaults YAML, selected manifests, profiles, local config, tool defaults, and CLI `--set`.
 - Preserves provenance through `Provenance` and `ResolvedConfig`.
 - Rejects unknown settings and type-invalid settings.
 
@@ -150,7 +150,7 @@ Justification:
 
 Current issues:
 
-- `ConfigResolver` owns schema loading, TOML loading, flattening, coercion, precedence, and provenance; this may need splitting later.
+- `ConfigResolver` owns schema loading, YAML loading, flattening, coercion, precedence, and provenance; this may need splitting later.
 - CLI selection settings declare `manifest_dir` in `SettingSpec`; selection overrides are applied before selected manifests and all CLI overrides are applied again at final precedence.
 - Config values such as `program.optimization`, `program.march`, and `program.mabi` affect identities, but the Makefile backend still hardcodes corresponding flags.
 
@@ -527,7 +527,7 @@ Current execution policy:
 
 | Location | Issue | Current note |
 |---|---|---|
-| Artifact specs | Declarative goal-owned specs now live in `config/gpgpu/goals.toml`, removing executor-side software input selection. | Extend specs with typed produced artifacts and command/tool fingerprints later. |
+| Artifact specs | Declarative goal-owned specs now live in `config/goals.yaml`, removing executor-side software input selection. | Extend specs with typed produced artifacts and command/tool fingerprints later. |
 | `sw.program.*` adapters | Compatibility wrappers over Makefile. | Documented as current compatibility backend. |
 | `hw.board.project` | Mock internal Vivado artifact. | Name/description marks mock. Needs replacement before Vivado work. |
 | `gpgpu run` cache behavior | Validated artifact hits skip execution. | Non-hit artifact states execute; action/check/service goals are not cache-skipped. |

@@ -1,0 +1,7 @@
+defaults:
+  architecture:
+    name: gpgpu32
+  rtl:
+    sp_per_sm: 32
+    imem_words: 2048
+    dmem_words: 2048

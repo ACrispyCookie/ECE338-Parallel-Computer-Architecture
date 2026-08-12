@@ -1,0 +1,6 @@
+defaults:
+  program:
+    name: nbody-3d
+    optimization: O1
+    march: rv32im
+    mabi: ilp32

@@ -104,10 +104,10 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_profile_overrides_selected_manifest_defaults(self):
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("program.optimization"), "O2")
-        self.assertIn("profiles/zed-demo.toml:profile", config.provenance_for("program.optimization").source)
+        self.assertIn("profiles/zed-demo.yaml:profile", config.provenance_for("program.optimization").source)
 
-    def test_schema_is_loaded_from_declarative_toml(self):
-        schema_path = ROOT / "config" / "gpgpu" / "schema.toml"
+    def test_schema_is_loaded_from_declarative_yaml(self):
+        schema_path = ROOT / "config" / "schema.yaml"
         self.assertTrue(schema_path.exists())
         self.assertNotIn("SCHEMA: dict[str, SettingSpec] = {", (ROOT / "tools" / "gpgpu" / "config.py").read_text())
         source = schema_path.read_text()
@@ -124,7 +124,7 @@ class PlannerFoundationTests(unittest.TestCase):
             manifest_selectors,
             {
                 "architecture": "architectures",
-                "board_type": "board_types",
+                "board_type": "boards",
                 "program": "programs",
                 "demo": "demos",
             },
@@ -140,10 +140,10 @@ class PlannerFoundationTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "Unknown schema field"):
             ConfigResolver(config_root=fixture)
 
-    def test_goals_are_loaded_from_declarative_toml(self):
+    def test_goals_are_loaded_from_declarative_yaml(self):
         from tools.gpgpu.goals import GOALS
 
-        goals_path = ROOT / "config" / "gpgpu" / "goals.toml"
+        goals_path = ROOT / "config" / "goals.yaml"
         self.assertTrue(goals_path.exists())
         self.assertNotIn("GOALS: dict[str, GoalDefinition] = {", (ROOT / "tools" / "gpgpu" / "goals.py").read_text())
         self.assertEqual(len(GOALS), 13)
@@ -151,14 +151,14 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_goal_loader_rejects_unknown_dependency(self):
         from tools.gpgpu.goals import GoalConfigError, load_goals
 
-        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_dependency" / "goals.toml"
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_dependency" / "goals.yaml"
         with self.assertRaisesRegex(GoalConfigError, "Unknown dependency goal"):
             load_goals(fixture, schema=ConfigResolver.SCHEMA)
 
     def test_goal_loader_rejects_unknown_parameter_setting(self):
         from tools.gpgpu.goals import GoalConfigError, load_goals
 
-        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_param" / "goals.toml"
+        fixture = ROOT / "tests" / "fixtures" / "bad_gpgpu_goal_unknown_param" / "goals.yaml"
         with self.assertRaisesRegex(GoalConfigError, "Unknown setting referenced"):
             load_goals(fixture, schema=ConfigResolver.SCHEMA)
 
@@ -176,7 +176,7 @@ class PlannerFoundationTests(unittest.TestCase):
 
         self.assertEqual(config.get("program"), "nbody")
         self.assertEqual(config.get("program.optimization"), "O2")
-        self.assertIn("config/gpgpu/programs/nbody.toml:defaults", config.provenance_for("program.optimization").source)
+        self.assertIn("config/programs/nbody.yaml:defaults", config.provenance_for("program.optimization").source)
 
     def test_cli_specific_setting_override_wins_after_selection_manifest_defaults(self):
         config = ConfigResolver().resolve(set_values=["program=nbody", "program.optimization=O3"])
@@ -199,8 +199,8 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertEqual(config.get("board"), "zedboard")
         self.assertEqual(config.get("backend"), "fpga-uart")
         self.assertEqual(config.get("demo.dataset"), "rings")
-        self.assertIn("config/gpgpu/profiles/zed-demo.toml:profile", config.provenance_for("backend").source)
-        self.assertIn("config/gpgpu/profiles/zed-demo.toml:profile", config.provenance_for("program.optimization").source)
+        self.assertIn("config/profiles/zed-demo.yaml:profile", config.provenance_for("backend").source)
+        self.assertIn("config/profiles/zed-demo.yaml:profile", config.provenance_for("program.optimization").source)
         provenance = config.provenance_for("demo.fps")
         self.assertEqual(config.get("demo.fps"), 30)
         self.assertEqual(provenance.source, "CLI --set")
@@ -223,21 +223,21 @@ class PlannerFoundationTests(unittest.TestCase):
         config = ConfigResolver().resolve(profile="zed-demo")
         self.assertEqual(config.get("board.port"), "/dev/ttyACM0")
         self.assertEqual(config.get("board"), "zedboard")
-        self.assertIn("local: config/gpgpu/local.example.toml", config.provenance_for("board").source)
-        self.assertIn("local: config/gpgpu/local.example.toml", config.provenance_for("board.port").source)
-        self.assertTrue((ROOT / "config" / "gpgpu" / "local.example.toml").exists())
+        self.assertIn("local: config/local.example.yaml", config.provenance_for("board").source)
+        self.assertIn("local: config/local.example.yaml", config.provenance_for("board.port").source)
+        self.assertTrue((ROOT / "config" / "local.example.yaml").exists())
         gitignore = (ROOT / ".gitignore").read_text()
-        self.assertIn("config/gpgpu/local.toml", gitignore)
+        self.assertIn("config/local.yaml", gitignore)
         self.assertIn("docs/migration/CONFIGURATION.md", gitignore)
 
     def test_approved_config_cleanup_shape(self):
-        config_root = ROOT / "config" / "gpgpu"
-        self.assertTrue((config_root / "defaults.toml").exists())
-        self.assertFalse((config_root / "components.toml").exists())
-        self.assertTrue((config_root / "board_types" / "zynq7000-zedboard.toml").exists())
+        config_root = ROOT / "config"
+        self.assertTrue((config_root / "defaults.yaml").exists())
+        self.assertFalse((config_root / "components.yaml").exists())
+        self.assertTrue((config_root / "boards" / "zynq7000-zedboard.yaml").exists())
         self.assertFalse((config_root / "platforms").exists())
-        self.assertTrue((config_root / "profiles" / "zed-demo.toml").exists())
-        self.assertFalse((config_root / "profiles.toml").exists())
+        self.assertTrue((config_root / "profiles" / "zed-demo.yaml").exists())
+        self.assertFalse((config_root / "profiles.yaml").exists())
 
         self.assertFalse(hasattr(ConfigResolver, "GOAL_DEFAULTS"))
         self.assertFalse(hasattr(ConfigResolver, "TOOL_ENV_DEFAULTS"))
@@ -286,7 +286,7 @@ class PlannerFoundationTests(unittest.TestCase):
     def test_goal_instance_params_are_declared_without_artifact_or_runtime_param_fields(self):
         from tools.gpgpu.goals import GOALS
 
-        source = (ROOT / "config" / "gpgpu" / "goals.toml").read_text()
+        source = (ROOT / "config" / "goals.yaml").read_text()
         self.assertNotIn("artifact_params", source)
         self.assertNotIn("runtime_params", source)
         self.assertEqual(
@@ -488,7 +488,7 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertIn("Configuration provenance", stdout.getvalue())
         self.assertIn("demo.fps", stdout.getvalue())
         self.assertIn("CLI --set", stdout.getvalue())
-        self.assertIn("local: config/gpgpu/local.example.toml", stdout.getvalue())
+        self.assertIn("local: config/local.example.yaml", stdout.getvalue())
 
     def test_local_wrapper_cli_executes_list(self):
         import subprocess

@@ -1,6 +1,6 @@
 # Goal Catalog Draft
 
-This document is the working catalog for the production `gpgpu` goal model. It is intentionally separate from `config/gpgpu/goals.toml` until the names, boundaries, and parameter model are approved.
+This document is the working catalog for the production `gpgpu` goal model. It is intentionally separate from `config/goals.yaml` until the names, boundaries, and parameter model are approved.
 
 The purpose is not to mirror every script or helper function one-to-one. The purpose is to define a small, coherent set of operations that cover the repository's current workflows without preserving script-era duplication or ambiguous naming.
 
@@ -594,7 +594,7 @@ Do not add separate goals for opening a browser, step buttons, FPS buttons, or H
 
 ## Current implemented goal names that should be renamed
 
-The current `config/gpgpu/goals.toml` still contains several names from earlier milestones that should not be finalized as-is.
+The current `config/goals.yaml` still contains several names from earlier milestones that should not be finalized as-is.
 
 | Current name | Proposed final name | Reason |
 | --- | --- | --- |

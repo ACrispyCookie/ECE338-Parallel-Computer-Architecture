@@ -1,6 +1,0 @@
-# Runtime defaults for the 2D nbody demo.
-[defaults.demo]
-name = "nbody"
-fps = 12
-dataset = "default"
-steps_per_frame = 1

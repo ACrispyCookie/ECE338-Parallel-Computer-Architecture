@@ -1,0 +1,10 @@
+goals:
+  sw.program.elf:
+    kind: artifact
+    public: true
+    description: bad
+    params:
+    - program
+    dependencies:
+    - role: missing
+      goal: missing.goal

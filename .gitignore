@@ -7,7 +7,7 @@
 venv/
 __pycache__
 SSOT.md
-config/gpgpu/local.toml
+config/local.yaml
 docs/migration/CONFIGURATION.md
 /out/*
 !/out/.gitkeep

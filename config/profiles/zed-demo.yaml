@@ -1,0 +1,18 @@
+profile:
+  backend: fpga-uart
+  architecture:
+    name: gpgpu32
+  board_type:
+    name: zynq7000-zedboard
+  board:
+    configure_policy: if-needed
+  program:
+    name: nbody-3d
+    optimization: O2
+  demo:
+    name: nbody-3d
+    fps: 12
+    dataset: rings
+  fpga:
+    synth:
+      strategy: Performance_Explore

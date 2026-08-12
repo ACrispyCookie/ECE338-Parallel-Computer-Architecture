@@ -1,0 +1,234 @@
+goals:
+  sw.program.native:
+    kind: artifact
+    public: true
+    description: Build a native reference executable for a selected program.
+    params:
+    - program
+    - program.optimization
+    expected_outputs:
+    - native reference executable artifact
+    artifact:
+      input_globs:
+      - sw/programs/Makefile
+      - sw/programs/{program}/*.c
+      - sw/programs/{program}/*.h
+      outputs:
+        executable:
+          path: '{program}_x86'
+          type: native-executable
+  sw.program.elf:
+    kind: artifact
+    public: true
+    description: Build a RISC-V ELF for the selected GPGPU program.
+    params:
+    - program
+    - architecture
+    - program.optimization
+    - program.march
+    - program.mabi
+    expected_outputs:
+    - RISC-V ELF artifact
+    artifact:
+      input_globs:
+      - sw/programs/Makefile
+      - sw/programs/{program}/*.c
+      - sw/programs/{program}/*.h
+      - sw/programs/{program}/*.S
+      - sw/programs/{program}/*.s
+      - sw/programs/{program}/*.ld
+      - sw/programs/{program}/fpga.py
+      outputs:
+        elf:
+          path: '{program}.elf'
+          type: riscv-elf
+        map:
+          path: '{program}.map'
+          type: linker-map
+  sw.program.image:
+    kind: artifact
+    public: true
+    description: Build an instruction-memory image for the selected program.
+    params:
+    - program
+    - architecture
+    - program.optimization
+    - program.march
+    - program.mabi
+    expected_outputs:
+    - instruction-memory image artifact
+    - objdump artifact
+    artifact:
+      input_globs:
+      - sw/programs/Makefile
+      - sw/programs/{program}/*.c
+      - sw/programs/{program}/*.h
+      - sw/programs/{program}/*.S
+      - sw/programs/{program}/*.s
+      - sw/programs/{program}/*.ld
+      - sw/programs/{program}/fpga.py
+      outputs:
+        imem:
+          path: '{program}_instructions.mem'
+          type: instruction-memory
+        objdump:
+          path: '{program}_dump_real.asm'
+          type: objdump
+    dependencies:
+    - role: elf
+      goal: sw.program.elf
+  hw.board.project:
+    kind: artifact
+    public: false
+    description: Internal mock Vivado project artifact.
+    params:
+    - architecture
+    - board_type
+    - rtl.sp_per_sm
+    - rtl.imem_words
+    - rtl.dmem_words
+    - fpga.part
+    expected_outputs:
+    - board project artifact
+  hw.board.bitstream:
+    kind: artifact
+    public: true
+    description: Build a programmable-logic bitstream.
+    params:
+    - architecture
+    - board_type
+    - rtl.sp_per_sm
+    - rtl.imem_words
+    - rtl.dmem_words
+    - fpga.part
+    - fpga.synth.strategy
+    expected_outputs:
+    - bitstream artifact
+    dependencies:
+    - role: project
+      goal: hw.board.project
+  hw.board.program:
+    kind: action
+    public: true
+    description: Configure the selected board with a compatible bitstream.
+    params:
+    - board
+    - board.configure_policy
+    - board.port
+    side_effects:
+    - configure selected board FPGA fabric
+    dependencies:
+    - role: bitstream
+      goal: hw.board.bitstream
+  hw.board.kernel.load:
+    kind: action
+    public: true
+    description: Load a GPGPU program image and initial data into hardware.
+    params:
+    - board
+    - kernel.load_policy
+    - uart.baud
+    side_effects:
+    - load selected program image into board memory
+    dependencies:
+    - role: configured_board
+      goal: hw.board.program
+    - role: program_image
+      goal: sw.program.image
+  hw.board.kernel.run:
+    kind: action
+    public: true
+    description: Run a loaded GPGPU kernel through the current transport.
+    params:
+    - board
+    - kernel.kernel_calls
+    side_effects:
+    - run loaded kernel on selected board
+    dependencies:
+    - role: loaded_kernel
+      goal: hw.board.kernel.load
+  demo.run:
+    kind: service
+    public: true
+    description: Run the selected interactive demo service.
+    params:
+    - demo
+    - backend
+    - demo.fps
+    - demo.dataset
+    - demo.steps_per_frame
+    - demo.http_host
+    - demo.http_port
+    lifecycle: long-running
+    side_effects:
+    - start selected interactive demo service
+    dependencies:
+    - role: native_reference
+      goal: sw.program.native
+      when:
+        backend: fake
+    - role: loaded_kernel
+      goal: hw.board.kernel.load
+      note_kind: included
+      note_subject: hw.board.kernel.load
+      note_reason: backend=fpga-uart requires hardware program-image load
+      when:
+        backend: fpga-uart
+    omitted_dependency_notes:
+    - kind: omitted
+      subject: hw.board.bitstream, hw.board.program, hw.board.kernel.load
+      reason: backend=fake uses native reference path
+      when:
+        backend: fake
+  test.rtl:
+    kind: check
+    public: true
+    description: Run the RTL simulation test suite.
+    params:
+    - architecture
+    - rtl.sp_per_sm
+    - rtl.imem_words
+    - rtl.dmem_words
+    expected_outputs:
+    - RTL check result
+    dependencies:
+    - role: assembly_fixture
+      goal: hw.rtl.assemble
+    - role: sim_executable
+      goal: hw.rtl.sim_executable
+  test.program:
+    kind: check
+    public: true
+    description: Compare a native program run against generated program artifacts.
+    params:
+    - program
+    - architecture
+    - program.optimization
+    expected_outputs:
+    - program comparison check result
+    dependencies:
+    - role: native_reference
+      goal: sw.program.native
+    - role: program_image
+      goal: sw.program.image
+  hw.rtl.assemble:
+    kind: artifact
+    public: false
+    description: Internal assembly fixture generation.
+    params:
+    - architecture
+    - rtl.imem_words
+    - rtl.dmem_words
+    expected_outputs:
+    - RTL assembly fixture artifact
+  hw.rtl.sim_executable:
+    kind: artifact
+    public: false
+    description: Internal Icarus simulation executable.
+    params:
+    - architecture
+    - rtl.sp_per_sm
+    - rtl.imem_words
+    - rtl.dmem_words
+    expected_outputs:
+    - RTL simulation executable artifact

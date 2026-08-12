@@ -1,6 +1,0 @@
-# Runtime defaults for the 3D nbody demo.
-[defaults.demo]
-name = "nbody-3d"
-fps = 12
-dataset = "rings"
-steps_per_frame = 1

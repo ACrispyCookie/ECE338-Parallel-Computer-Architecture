@@ -1,0 +1,6 @@
+defaults:
+  program:
+    name: nbody
+    optimization: O2
+    march: rv32im
+    mabi: ilp32

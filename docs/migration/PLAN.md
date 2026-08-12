@@ -60,21 +60,21 @@ Added migration records under `docs/migration/` and renamed initial goal identif
 
 ### Milestone 2: file-backed manifests and local CLI wrapper
 
-Objective: move selected entities, profiles, and machine-local defaults out of `tools/gpgpu/config.py` into repo-owned TOML files while preserving current planner behavior.
+Objective: move selected entities, profiles, and machine-local defaults out of `tools/gpgpu/config.py` into repo-owned YAML files while preserving current planner behavior.
 
 Implemented in commit `8d4c0f1` on branch `gpgpu-planner-foundation`.
 
 Files expected to change:
 
-- `config/gpgpu/components.toml`
-- `config/gpgpu/profiles.toml`
-- `config/gpgpu/local.example.toml`
-- `config/gpgpu/architectures/gpgpu32.toml`
-- `config/gpgpu/platforms/zynq7000-zedboard.toml`
-- `config/gpgpu/programs/nbody.toml`
-- `config/gpgpu/programs/nbody-3d.toml`
-- `config/gpgpu/demos/nbody.toml`
-- `config/gpgpu/demos/nbody-3d.toml`
+- `config/components.yaml`
+- `config/profiles.yaml`
+- `config/local.example.yaml`
+- `config/architectures/gpgpu32.yaml`
+- `config/platforms/zynq7000-zedboard.yaml`
+- `config/programs/nbody.yaml`
+- `config/programs/nbody-3d.yaml`
+- `config/demos/nbody.yaml`
+- `config/demos/nbody-3d.yaml`
 - `.gitignore`
 - `tools/gpgpu/config.py`
 - `tools/gpgpu/gpgpu`
@@ -96,7 +96,7 @@ Expected evidence:
 - type-invalid manifest setting fails;
 - profile overrides selected manifest defaults;
 - unused `variant` placeholder is removed from the initial schema;
-- provenance reports TOML file and section names;
+- provenance reports YAML file and section names;
 - CLI output stays equivalent to current planner behavior;
 - local board config is optional and gitignored;
 - `tools/gpgpu/gpgpu` works as a local wrapper.
@@ -110,9 +110,9 @@ Implemented in commits `8ba72eb` and `d7637de` on branch `gpgpu-planner-foundati
 Added/changed:
 
 - `platform` config concept renamed to `board_type`;
-- `components.toml` renamed to `defaults.toml`;
-- board type manifests moved under `config/gpgpu/board_types/`;
-- profiles moved under `config/gpgpu/profiles/<name>.toml`;
+- `components.yaml` renamed to `defaults.yaml`;
+- board type manifests moved under `config/boards/`;
+- profiles moved under `config/profiles/<name>.yaml`;
 - local board instance defaults renamed from `lab-zed` to `zedboard`;
 - local-origin settings are marked in `gpgpu explain` provenance;
 - `kernel.kernel_calls` retained for future `hw.board.kernel.run` use;
@@ -528,7 +528,7 @@ Non-goals:
 Expected evidence:
 
 - tests prove selector behavior is declared in schema, not a hardcoded key set;
-- `--set program=nbody` loads `programs/nbody.toml` defaults;
+- `--set program=nbody` loads `programs/nbody.yaml` defaults;
 - `--set program=nbody --set program.optimization=O3` keeps final CLI precedence;
 - CLI `plan` from outside the repo still reports cache paths under the repo root;
 - executor structure tests prove `run_plan()` is the only public run API;
@@ -540,10 +540,10 @@ Objective: move substantial control-plane definitions out of Python source and i
 
 Scope:
 
-- `config/gpgpu/schema.toml` declares settings, types, defaults, enum choices, and manifest selectors;
-- `config/gpgpu/goals.toml` declares goals, params, visibility, dependencies, notes, and artifact input/output specs;
-- `tools/gpgpu/config.py` loads and validates schema TOML instead of owning a hardcoded schema table;
-- `tools/gpgpu/goals.py` loads and validates goal TOML instead of owning a hardcoded goal table;
+- `config/schema.yaml` declares settings, types, defaults, enum choices, and manifest selectors;
+- `config/goals.yaml` declares goals, params, visibility, dependencies, notes, and artifact input/output specs;
+- `tools/gpgpu/config.py` loads and validates schema YAML instead of owning a hardcoded schema table;
+- `tools/gpgpu/goals.py` loads and validates goal YAML instead of owning a hardcoded goal table;
 - `tools/gpgpu/artifacts.py` resolves declarative input/output specs and compares current expected input/output sets against metadata;
 - `Executor._input_paths_for()` is removed;
 - `sw.program.image` expected outputs now match current adapter reality: instruction-memory image plus objdump artifact.
@@ -572,7 +572,7 @@ Objective: tighten the artifact interface before cache skipping by making declar
 Scope:
 
 - keep the output data model intentionally small: role, path, and type;
-- declare software artifact outputs in `config/gpgpu/goals.toml` as typed output tables;
+- declare software artifact outputs in `config/goals.yaml` as typed output tables;
 - record produced outputs in `artifact.toml` under `[produced.<role>]` with path and type;
 - validate output role/path/type declarations during cache-status checks;
 - require declared outputs to exist after adapter success before a run is recorded as successful;
@@ -625,7 +625,7 @@ Non-goals:
 
 Expected evidence:
 
-- tests prove `config/gpgpu/goals.toml` no longer contains `artifact_params` or `runtime_params`;
+- tests prove `config/goals.yaml` no longer contains `artifact_params` or `runtime_params`;
 - tests prove `test.program` includes `program`, `architecture`, and `program.optimization` in its planned instance;
 - tests prove action/service params still appear in planned instances;
 - tests prove non-artifact goals still do not show compact cache status;
@@ -666,7 +666,7 @@ Expected evidence:
 
 ## Dependency execution policy
 
-Dependencies are declared in `config/gpgpu/goals.toml` and loaded into typed `GoalDefinition.dependencies` records by `tools/gpgpu/goals.py`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
+Dependencies are declared in `config/goals.yaml` and loaded into typed `GoalDefinition.dependencies` records by `tools/gpgpu/goals.py`. The planner resolves those declarations using equality-only conditions and then builds dependency graphs for `list`, `plan`, `explain`, and `run`.
 
 `gpgpu run <goal>` executes registered adapters in the plan's topological order. Public goals, check goals, action goals, and service goals without adapters fail during preflight before any dependency adapter runs. Internal placeholder goals should not be added unless they represent a real artifact boundary; `sw.program.compile_riscv` was removed because `sw.program.elf` is the current compile/link artifact boundary.
 
@@ -742,7 +742,7 @@ Long-term direction: executor should walk a validated planned graph in dependenc
 
 ## Future `config.py` direction
 
-`config.py` currently owns schema loading/validation, TOML loading, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. The setting definitions themselves live in `config/gpgpu/schema.toml`.
+`config.py` currently owns schema loading/validation, YAML loading, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. The setting definitions themselves live in `config/schema.yaml`.
 
 Near-term rule:
 
@@ -758,7 +758,7 @@ tools/gpgpu/config/
   schema.py
   resolver.py
   provenance.py
-  toml_loader.py
+  yaml_loader.py
   types.py
 ```
 
@@ -767,7 +767,7 @@ Responsibilities:
 - `schema.py`: known settings, types, defaults, enum choices, and manifest selectors;
 - `resolver.py`: precedence order and selected-manifest application;
 - `provenance.py`: source labels and explain-format helpers;
-- `toml_loader.py`: TOML reading, flattening, validation;
+- `yaml_loader.py`: YAML reading, flattening, validation;
 - `types.py`: enums, coercion helpers, typed values.
 
 Future decision: decide whether typed planner settings are passed into legacy Make, for example `OPT`, `MARCH`, and `MABI`, or whether new toolchain behavior moves to a new adapter-controlled build path. Defer this until after `sw.program.image` exposes the objdump and memory-format boundary.

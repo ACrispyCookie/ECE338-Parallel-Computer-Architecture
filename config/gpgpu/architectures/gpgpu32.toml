@@ -1,8 +1,0 @@
-# Hardware architecture defaults that affect RTL/program artifacts.
-[defaults.architecture]
-name = "gpgpu32"
-
-[defaults.rtl]
-sp_per_sm = 32
-imem_words = 2048
-dmem_words = 2048

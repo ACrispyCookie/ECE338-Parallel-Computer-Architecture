@@ -1,0 +1,5 @@
+settings:
+  backend:
+    type: str
+    default: fake
+    extra: bad

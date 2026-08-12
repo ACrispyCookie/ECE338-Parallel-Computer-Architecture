@@ -1,0 +1,6 @@
+defaults:
+  board:
+    name: zedboard
+    port: /dev/ttyACM0
+  uart:
+    baud: 115200

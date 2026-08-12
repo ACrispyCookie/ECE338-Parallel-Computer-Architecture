@@ -1,0 +1,5 @@
+defaults:
+  board_type:
+    name: zynq7000-zedboard
+  fpga:
+    part: xc7z020clg484-1

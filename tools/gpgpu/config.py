@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 class ConfigError(ValueError):
@@ -52,9 +53,11 @@ def load_schema(path: str | Path) -> dict[str, SettingSpec]:
     schema_path = Path(path)
     try:
         with schema_path.open("rb") as handle:
-            data = tomllib.load(handle)
-    except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"Invalid TOML in {schema_path}: {exc}") from exc
+            data = yaml.safe_load(handle)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"Invalid YAML in {schema_path}: {exc}") from exc
+    if data is None:
+        data = {}
     settings = data.get("settings")
     if not isinstance(settings, dict) or not settings:
         raise ConfigError(f"{schema_path}: missing [settings] table")
@@ -126,15 +129,15 @@ def _coerce_value(spec: SettingSpec, raw_value: Any) -> Any:
 
 
 class ConfigResolver:
-    """Resolve typed GPGPU planner configuration from TOML manifests."""
+    """Resolve typed GPGPU planner configuration from YAML manifests."""
 
-    SCHEMA = load_schema(_default_repo_root() / "config" / "gpgpu" / "schema.toml")
+    SCHEMA = load_schema(_default_repo_root() / "config" / "schema.yaml")
 
     def __init__(self, config_root: str | Path | None = None):
         repo_root = _default_repo_root()
         self.repo_root = repo_root
-        self.config_root = Path(config_root) if config_root is not None else repo_root / "config" / "gpgpu"
-        schema_path = self.config_root / "schema.toml"
+        self.config_root = Path(config_root) if config_root is not None else repo_root / "config"
+        schema_path = self.config_root / "schema.yaml"
         self.schema = load_schema(schema_path) if schema_path.exists() else self.SCHEMA
 
     def resolve(
@@ -151,7 +154,7 @@ class ConfigResolver:
         for key, spec in self.schema.items():
             self._assign(values, provenance, key, spec.default, "schema default")
 
-        self._apply_defaults_file(values, provenance, self.config_root / "defaults.toml", "defaults")
+        self._apply_defaults_file(values, provenance, self.config_root / "defaults.yaml", "defaults")
 
         profile_mapping: dict[str, Any] | None = None
         profile_source: str | None = None
@@ -173,10 +176,10 @@ class ConfigResolver:
         return ResolvedConfig(values=values, provenance=provenance)
 
     def _load_profile(self, profile: str) -> tuple[dict[str, Any], str]:
-        path = self.config_root / "profiles" / f"{profile}.toml"
+        path = self.config_root / "profiles" / f"{profile}.yaml"
         if not path.exists():
             raise ConfigError(f"Unknown profile: {profile}")
-        data = self._read_toml(path)
+        data = self._read_yaml(path)
         mapping = data.get("profile", {})
         if not isinstance(mapping, dict) or not mapping:
             raise ConfigError(f"Profile {profile} must define a [profile] table")
@@ -208,15 +211,15 @@ class ConfigResolver:
         directory: str,
     ) -> None:
         selected = values[selection_key]
-        path = self.config_root / directory / f"{selected}.toml"
+        path = self.config_root / directory / f"{selected}.yaml"
         self._apply_defaults_file(values, provenance, path, "defaults", required=False)
 
     def _apply_local(self, values: dict[str, Any], provenance: dict[str, Provenance]) -> None:
-        local = self.config_root / "local.toml"
+        local = self.config_root / "local.yaml"
         if local.exists():
             self._apply_defaults_file(values, provenance, local, "defaults", source_prefix="local: ")
             return
-        self._apply_defaults_file(values, provenance, self.config_root / "local.example.toml", "defaults", required=False, source_prefix="local: ")
+        self._apply_defaults_file(values, provenance, self.config_root / "local.example.yaml", "defaults", required=False, source_prefix="local: ")
 
     def _apply_defaults_file(
         self,
@@ -232,7 +235,7 @@ class ConfigResolver:
             if required:
                 raise ConfigError(f"Missing config file: {self._source_path(path)}")
             return
-        data = self._read_toml(path)
+        data = self._read_yaml(path)
         mapping = data.get(section, {})
         if not isinstance(mapping, dict):
             raise ConfigError(f"{self._source_path(path)}:{section} must be a table")
@@ -268,12 +271,13 @@ class ConfigResolver:
                 flat[full_key] = value
         return flat
 
-    def _read_toml(self, path: Path) -> dict[str, Any]:
+    def _read_yaml(self, path: Path) -> dict[str, Any]:
         try:
             with path.open("rb") as f:
-                return tomllib.load(f)
-        except tomllib.TOMLDecodeError as exc:
-            raise ConfigError(f"Invalid TOML in {self._source_path(path)}: {exc}") from exc
+                data = yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise ConfigError(f"Invalid YAML in {self._source_path(path)}: {exc}") from exc
+        return data or {}
 
     def _source_path(self, path: Path) -> str:
         try:

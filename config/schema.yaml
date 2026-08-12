@@ -1,0 +1,99 @@
+settings:
+  architecture:
+    type: str
+    default: gpgpu32
+    manifest_dir: architectures
+  board_type:
+    type: str
+    default: zynq7000-zedboard
+    manifest_dir: boards
+  board:
+    type: str
+    default: zedboard
+  program:
+    type: str
+    default: nbody
+    manifest_dir: programs
+  demo:
+    type: str
+    default: nbody
+    manifest_dir: demos
+  backend:
+    type: enum
+    choices:
+    - fake
+    - fpga-uart
+    default: fake
+  toolchain:
+    type: str
+    default: riscv-gcc-rv32im-ilp32
+  program.optimization:
+    type: enum
+    choices:
+    - O0
+    - O1
+    - O2
+    - O3
+    default: O2
+  program.march:
+    type: str
+    default: rv32im
+  program.mabi:
+    type: str
+    default: ilp32
+  rtl.sp_per_sm:
+    type: int
+    default: 32
+  rtl.imem_words:
+    type: int
+    default: 2048
+  rtl.dmem_words:
+    type: int
+    default: 2048
+  fpga.synth.strategy:
+    type: str
+    default: default
+  fpga.part:
+    type: str
+    default: xc7z020clg484-1
+  board.configure_policy:
+    type: enum
+    choices:
+    - if-needed
+    - always
+    - never
+    default: if-needed
+  kernel.load_policy:
+    type: enum
+    choices:
+    - if-needed
+    - always
+    - never
+    default: if-needed
+  kernel.kernel_calls:
+    type: int
+    default: 1
+  demo.fps:
+    type: int
+    default: 12
+  demo.dataset:
+    type: str
+    default: default
+  demo.steps_per_frame:
+    type: int
+    default: 1
+  demo.http_host:
+    type: str
+    default: 0.0.0.0
+  demo.http_port:
+    type: int
+    default: 8765
+  board.port:
+    type: str
+    default: /dev/ttyACM0
+  uart.baud:
+    type: int
+    default: 115200
+  executor.verbosity:
+    type: int
+    default: 0
