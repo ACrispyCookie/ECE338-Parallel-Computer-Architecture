@@ -24,7 +24,7 @@ Most important cleanup findings after Milestone 23:
 5. Artifact cache validation now compares current declarative input/output specs against recorded metadata, so newly added matching source files invalidate old artifacts.
 6. CLI selection settings are schema-declared manifest selectors and CLI passes one repo root into planner, executor, and cleaner.
 7. Software adapters now fail if `make` returns success but a declared output is missing.
-8. Dependency artifacts are now consumed by dependency role and output role, not filename suffix scans.
+8. Dependency artifacts are now consumed by dependency goal id and output role, not filename suffix scans.
 9. Goal definitions now use one production-shaped `params` field for every goal kind; check/action/service parameters are planned deterministically without artifact-only naming.
 10. Some migration docs still mix historical and current status; `CURRENT_STATE.md` remains the current branch map.
 
@@ -223,7 +223,7 @@ Current issues:
 
 - Validation now compares recorded input/output metadata against current declarative artifact specs before checking hashes.
 - `_dependency_identities(node)` uses a hidden `GoalInstance` attribute contract.
-- Metadata dependency identities are keyed by goal id, not by dependency role or stable edge id.
+- Metadata dependency identities are keyed by dependency goal id, matching the current role-less dependency model.
 - `write_artifact_metadata()` can infer repo root from `directory.parents[3]` if none is passed; this fallback is brittle.
 
 ### `tools/gpgpu/executor.py`
@@ -254,9 +254,9 @@ Current issues:
 - Artifact input selection is now delegated to declarative specs through `resolve_artifact_inputs()`.
 - `format_run_result()` and `format_run_summary()` overlap with `reporter.py` and may be legacy debug helpers.
 - Adapter success now requires all declared produced files to exist.
-- Direct dependency outputs are passed by dependency role and output role.
+- Direct dependency outputs are passed by dependency goal id and output role.
 - Cache-hit artifact outputs are passed to dependents without re-running the producer adapter.
-- Direct dependency identities are still recorded in metadata by goal id, not by dependency role/edge/instance.
+- Direct dependency identities are recorded in metadata by dependency goal id.
 
 ### `tools/gpgpu/adapters/sw_programs.py`
 
@@ -538,16 +538,16 @@ Current execution policy:
 
 | Location | Issue | Why it matters | Recommended cleanup |
 |---|---|---|---|
-| Metadata dependency identities | Dependency identities are still keyed by goal id in `artifact.toml`. | Multiple instances of the same dependency goal would collide in metadata. | Move metadata dependency identity keys to dependency role or stable edge key before multi-instance graphs. |
+| Metadata dependency identities | Dependency identities are keyed by dependency goal id in `artifact.toml`. | Multiple instances of the same dependency goal are not currently modeled. | Add dependency-local binding/aliases only when a real multi-instance use case exists. |
 | `GoalDefinition.implementation_version` | Default `"mock-v1"`. | Real adapters now use mock identity version. | Assign explicit implementation versions per goal/adapter. |
 | `artifacts.py` input validation | Validates recorded inputs only. | Newly added inputs may not invalidate old artifacts. | Compare against declarative current input specs. |
-| `artifacts.py` dependency metadata | Keyed by goal id. | Cannot represent two instances of same goal. | Store role/edge/instance identities. |
-| `Executor._direct_dependency_identities()` | Keyed by goal id. | Same multi-instance limitation. | Use dependency roles from `GoalDependency`. |
+| `artifacts.py` dependency metadata | Keyed by dependency goal id. | Cannot represent two instances of same goal. | Keep simple until dependency-local binding/aliases are introduced. |
+| `Executor._direct_dependency_identities()` | Keyed by dependency goal id. | Same multi-instance limitation. | Add dependency-local binding/aliases only with a real multi-instance use case. |
 | CLI repo-root coordination | CLI computes one repo root via `ConfigResolver` and passes it to planner, executor, and cleaner. | Prevents CLI cache paths from depending on current working directory. | Keep explicit root passing; avoid adding a helper file until path policy grows. |
 | Config manifest selection | `SettingSpec.manifest_dir` declares which settings select manifests. | Avoids hardcoded selector-key sets and fixes `--set program=...` manifest defaults. | Extend schema metadata for future manifest-selected settings. |
 | `format_run_result()`/`format_run_summary()` | Older formatting alongside reporters. | Duplicate presentation paths. | Keep as debug helpers or remove in a later formatting cleanup. |
 | Migration docs status split | Historical milestone records and current branch status are mixed in long docs. | Readers can confuse old milestone facts with current status. | Keep `CURRENT_STATE.md` as the current map and split historical/current sections where needed. |
-| `sw.program.image` expected outputs | Claims data-memory image artifact. | Current adapter does not produce one. | Align expected outputs with actual produced artifacts. |
+| Artifact output descriptions | Stored beside each declared output path/type. | Top-level `expected_outputs` was removed from declarative goals. | Keep descriptions local to the output they describe. |
 | Makefile flag hardcoding | Planner settings affect identity but not actual command. | Identity can vary while output command does not. | Decide Make variable pass-through vs Python-native backend. |
 | Reporter type hints | Uses `Any`. | Less clear contracts. | Use protocols once interfaces settle. |
 

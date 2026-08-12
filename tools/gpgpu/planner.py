@@ -32,7 +32,6 @@ class GoalInstance:
     description: str
     lifecycle: str | None = None
     dependencies: tuple[str, ...] = ()
-    dependency_roles: tuple[tuple[str, str], ...] = ()
     dependency_identities: tuple[tuple[str, str], ...] = ()
     expected_outputs: tuple[str, ...] = ()
     side_effects: tuple[str, ...] = ()
@@ -184,7 +183,6 @@ class Planner:
             description=definition.description,
             lifecycle=definition.lifecycle,
             dependencies=dependency_keys,
-            dependency_roles=tuple((dependency.role, instance.key) for dependency, instance in zip(dependency_entries, dependency_instances)),
             dependency_identities=tuple(
                 (instance.goal_id, instance.identity) for instance in dependency_instances
             ),
@@ -202,7 +200,6 @@ class Planner:
                 description=instance.description,
                 lifecycle=instance.lifecycle,
                 dependencies=instance.dependencies,
-                dependency_roles=instance.dependency_roles,
                 dependency_identities=instance.dependency_identities,
                 expected_outputs=instance.expected_outputs,
                 side_effects=instance.side_effects,

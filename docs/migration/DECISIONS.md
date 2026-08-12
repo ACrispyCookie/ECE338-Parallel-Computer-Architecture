@@ -230,7 +230,7 @@ Accepted Milestone 21 direction:
 - Python owns typed dataclasses, YAML loading, validation, planning, execution, and artifact/cache algorithms.
 - Artifact validation compares recorded metadata against the current declarative input/output spec before trusting hashes.
 - `Executor._input_paths_for()` is removed; software input selection is no longer hardcoded in the executor.
-- `sw.program.image` expected outputs describe current adapter reality: instruction-memory image and objdump artifact.
+- Artifact output descriptions live under each `artifact.outputs.<name>` entry beside `path` and `type`; top-level `expected_outputs` is not used for declarative goals.
 
 ## Strict typed artifact output contracts
 
@@ -243,7 +243,7 @@ Accepted Milestone 22 direction:
 - Successful artifact metadata records produced outputs under `[produced.<role>]` with `path` and `type`, not as a loose `produced.files` list.
 - Cache validation treats output role, path, or type drift as a miss/stale condition before trusting hashes.
 - An artifact adapter returning success is not sufficient: the executor requires every declared output to exist before recording the run as successful.
-- Dependency artifact consumption uses dependency role plus output role, for example `dependency_outputs["elf"]["elf"]`, rather than filename suffix guessing.
+- Dependency artifact consumption uses dependency goal id plus output role, for example `dependency_outputs["sw.program.elf"]["elf"]`, rather than filename suffix guessing.
 - `sw.program.image` consumes the `sw.program.elf` dependency through its declared `elf` output of type `riscv-elf`.
 
 ## Generated software ABI artifact
@@ -251,7 +251,7 @@ Accepted Milestone 22 direction:
 Accepted current direction:
 
 - `sw.abi` is an internal artifact goal that generates `gpgpu_runtime.h`, `gpgpu.ld`, and `gpgpu_abi.json` from selected `architecture.*` ABI settings.
-- `sw.program.elf` depends on `sw.abi` and consumes the generated runtime header and linker script by dependency role/output role.
+- `sw.program.elf` depends on `sw.abi` and consumes the generated runtime header and linker script by dependency goal id/output role.
 - The Makefile remains the software compatibility backend, but now accepts `ABI_INCLUDE_DIR`, `RUNTIME_HEADER`, and overridable `LINKER_SCRIPT` variables so generated ABI files are used without moving generated files into source directories.
 - Program sources include `"gpgpu_runtime.h"` through the include path instead of hardcoding `../gpgpu_runtime.h`, allowing generated ABI headers to be selected by the adapter.
 - Compiler flags such as optimization, `march`, and `mabi` remain Makefile-hardcoded for now; only ABI file selection is wired through generated artifacts.
@@ -273,7 +273,7 @@ Accepted Milestone 24 direction:
 
 - `gpgpu run` skips artifact adapters only when the planned artifact status is a validated `hit`.
 - Every artifact status other than `hit` is executable miss behavior and runs the adapter when one is required.
-- Cache-hit artifact outputs are reconstructed from declarative output specs and passed to dependent adapters by dependency role/output role.
+- Cache-hit artifact outputs are reconstructed from declarative output specs and passed to dependent adapters by dependency goal id/output role.
 - Action, check, and service goals are never cache-skipped by artifact cache status.
 - Missing public/check/action/service adapters still fail preflight unless the specific artifact node is a validated cache hit.
 - Internal planner-only artifact nodes without adapters keep their existing explicit skipped behavior.

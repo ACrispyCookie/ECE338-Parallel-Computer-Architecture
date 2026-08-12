@@ -576,7 +576,7 @@ Scope:
 - record produced outputs in `artifact.toml` under `[produced.<role>]` with path and type;
 - validate output role/path/type declarations during cache-status checks;
 - require declared outputs to exist after adapter success before a run is recorded as successful;
-- pass dependency outputs to adapters by dependency role and output role;
+- pass dependency outputs to adapters by dependency goal id and output role;
 - update `sw.program.image` to consume the declared ELF dependency output rather than scanning paths by suffix.
 
 Non-goals:
@@ -595,7 +595,7 @@ Expected evidence:
 - tests cover `artifact.toml` output metadata shape;
 - tests cover cache miss/stale behavior for output declaration drift;
 - tests cover adapter-success-with-missing-output failure;
-- tests cover dependency output lookup by dependency role/output role;
+- tests cover dependency output lookup by dependency goal id/output role;
 - structure tests prevent suffix-based dependency artifact lookup in software adapters;
 - full test discovery passes;
 - smoke run/plan/clean cycle still works.
@@ -642,7 +642,7 @@ Scope:
 - treat `missing`, `unknown`, `incomplete`, `invalid`, and `stale` as misses that execute adapters;
 - preflight cache-hit artifact nodes as satisfiable without an adapter;
 - reconstruct declared outputs for skipped cache-hit artifacts;
-- pass skipped dependency outputs to downstream adapters by dependency role/output role;
+- pass skipped dependency outputs to downstream adapters by dependency goal id/output role;
 - keep action, check, and service goals non-cache-skippable;
 - keep internal planner-only artifact skip behavior explicit and unchanged.
 

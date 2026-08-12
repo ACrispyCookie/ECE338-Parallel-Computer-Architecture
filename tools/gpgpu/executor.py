@@ -128,7 +128,7 @@ class Executor:
                     continue
                 raise ExecuteError(f"no executor adapter registered for required goal {node.goal_id}")
 
-            context = self._context_for(node, dependency_artifacts)
+            context = self._context_for(node, dependency_artifacts, nodes_by_key=nodes_by_key)
             if node.kind == "artifact":
                 context.artifact_dir.mkdir(parents=True, exist_ok=True)
             records.append(RunRecord(node=node, status="running"))
@@ -270,23 +270,26 @@ class Executor:
         self,
         node: GoalInstance,
         dependency_artifacts: Mapping[str, tuple[ProducedArtifact, ...]],
+        *,
+        nodes_by_key: Mapping[str, GoalInstance],
     ) -> ExecutionContext:
         declared_outputs = {
             artifact.role: artifact
             for artifact in resolve_artifact_outputs(artifact_dir(self.repo_root, node), node, self.config)
         }
         dependency_outputs: dict[str, dict[str, ProducedArtifact]] = {}
-        dependency_artifacts_by_role: dict[str, tuple[ProducedArtifact, ...]] = {}
-        for role, dependency_key in node.dependency_roles:
+        dependency_artifacts_by_goal: dict[str, tuple[ProducedArtifact, ...]] = {}
+        for dependency_key in node.dependencies:
+            dependency = nodes_by_key[dependency_key]
             artifacts = dependency_artifacts.get(dependency_key, ())
-            dependency_artifacts_by_role[role] = artifacts
-            dependency_outputs[role] = {artifact.role: artifact for artifact in artifacts}
+            dependency_artifacts_by_goal[dependency.goal_id] = artifacts
+            dependency_outputs[dependency.goal_id] = {artifact.role: artifact for artifact in artifacts}
         return ExecutionContext(
             config=self.config,
             repo_root=self.repo_root,
             node=node,
             artifact_dir=artifact_dir(self.repo_root, node),
-            dependency_artifacts=dependency_artifacts_by_role,
+            dependency_artifacts=dependency_artifacts_by_goal,
             dependency_outputs=dependency_outputs,
             declared_outputs=declared_outputs,
         )

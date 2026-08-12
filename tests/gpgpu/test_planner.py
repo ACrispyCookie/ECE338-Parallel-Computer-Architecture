@@ -286,14 +286,13 @@ class PlannerFoundationTests(unittest.TestCase):
 
         image_deps = GOALS["sw.program.image"].dependencies
         self.assertEqual(tuple(dep.goal_id for dep in image_deps), ("sw.program.elf",))
-        self.assertEqual(image_deps[0].role, "elf")
 
         kernel_load_deps = GOALS["hw.board.kernel.load"].dependencies
         self.assertEqual(
             tuple(dep.goal_id for dep in kernel_load_deps),
             ("hw.board.program", "sw.program.image"),
         )
-        self.assertEqual(tuple(dep.role for dep in kernel_load_deps), ("configured_board", "program_image"))
+
 
     def test_demo_dependencies_are_conditional_declarations(self):
         from tools.gpgpu.goals import GOALS
@@ -458,7 +457,7 @@ class PlannerFoundationTests(unittest.TestCase):
 
     def test_verbose_plan_shows_outputs_side_effects_and_lifecycle(self):
         rendered = Planner(ConfigResolver().resolve(profile="zed-demo")).plan("demo.run").format_plan(verbose=True)
-        self.assertIn("↳ outputs      bitstream artifact", rendered)
+        self.assertIn("↳ outputs      generated GPGPU runtime header", rendered)
         self.assertIn("↳ outputs      instruction-memory image artifact", rendered)
         self.assertIn("↳ effects      configure selected board FPGA fabric", rendered)
         self.assertIn("↳ effects      load selected program image into board memory", rendered)
@@ -586,7 +585,7 @@ class PlannerFoundationTests(unittest.TestCase):
             code = main(["--color", "never", "plan", "demo.run", "--profile", "zed-demo", "--verbose"])
         self.assertEqual(code, 0)
         rendered = stdout.getvalue()
-        self.assertIn("↳ outputs      bitstream artifact", rendered)
+        self.assertIn("↳ outputs      generated GPGPU runtime header", rendered)
         self.assertIn("↳ effects      configure selected board FPGA fabric", rendered)
 
         stdout = io.StringIO()

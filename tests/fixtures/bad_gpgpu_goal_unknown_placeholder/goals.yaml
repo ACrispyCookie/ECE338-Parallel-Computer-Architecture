@@ -12,5 +12,6 @@ goals:
           - sw/programs/{missing}/*.c
           outputs:
             elf:
+              description: bad output
               path: '{program}.elf'
               type: riscv-elf

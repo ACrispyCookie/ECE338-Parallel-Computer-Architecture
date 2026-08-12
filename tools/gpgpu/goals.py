@@ -20,6 +20,7 @@ class GoalConfigError(ValueError):
 @dataclass(frozen=True)
 class ArtifactOutputSpec:
     role: str
+    description: str
     path_template: str
     artifact_type: str
 
@@ -33,7 +34,6 @@ class ArtifactSpec:
 @dataclass(frozen=True)
 class GoalDependency:
     goal_id: str
-    role: str
     when: tuple[tuple[str, object], ...] = ()
     note_kind: str | None = None
     note_subject: str | None = None
@@ -123,7 +123,6 @@ def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]
         "params",
         "implementation_version",
         "lifecycle",
-        "expected_outputs",
         "side_effects",
         "dependencies",
         "omitted_dependency_notes",
@@ -149,12 +148,12 @@ def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]
         raise GoalConfigError(f"Goal {goal_id} lifecycle is only valid for service goals")
 
     params = _string_tuple(entry.get("params", ()), f"Goal {goal_id} params")
-    expected_outputs = _string_tuple(entry.get("expected_outputs", ()), f"Goal {goal_id} expected_outputs")
     side_effects = _string_tuple(entry.get("side_effects", ()), f"Goal {goal_id} side_effects")
     implementation_version = entry.get("implementation_version", "mock-v1")
     if not isinstance(implementation_version, str):
         raise GoalConfigError(f"Goal {goal_id} implementation_version must be a string")
     artifact = _load_artifact_spec(goal_id, entry.get("artifact"), schema=schema)
+    expected_outputs = tuple(output.description for output in artifact.outputs) if artifact is not None else ()
 
     return GoalDefinition(
         goal_id=goal_id,
@@ -178,23 +177,22 @@ def _load_dependencies(goal_id: str, entries: object, *, schema: Mapping[str, Se
     if not isinstance(entries, list):
         raise GoalConfigError(f"Goal {goal_id} dependencies must be a list")
     dependencies: list[GoalDependency] = []
-    roles: set[str] = set()
+    dependency_goals: set[str] = set()
     for item in entries:
         if not isinstance(item, dict):
             raise GoalConfigError(f"Goal {goal_id} dependency must be a table")
-        role = item.get("role")
         dep_goal = item.get("goal")
-        if not isinstance(role, str) or not role:
-            raise GoalConfigError(f"Goal {goal_id} dependency missing role")
-        if role in roles:
-            raise GoalConfigError(f"Goal {goal_id} duplicate dependency role: {role}")
-        roles.add(role)
         if not isinstance(dep_goal, str) or not dep_goal:
-            raise GoalConfigError(f"Goal {goal_id} dependency {role} missing goal")
+            raise GoalConfigError(f"Goal {goal_id} dependency missing goal")
+        if dep_goal in dependency_goals:
+            raise GoalConfigError(f"Goal {goal_id} duplicate dependency goal: {dep_goal}")
+        dependency_goals.add(dep_goal)
+        unknown = set(item) - {"goal", "when", "note_kind", "note_subject", "note_reason"}
+        if unknown:
+            raise GoalConfigError(f"Unknown dependency field for {goal_id}: {sorted(unknown)[0]}")
         dependencies.append(
             GoalDependency(
                 goal_id=dep_goal,
-                role=role,
                 when=_condition_tuple(item.get("when", {}), schema=schema),
                 note_kind=_optional_str(item.get("note_kind"), f"Goal {goal_id} dependency note_kind"),
                 note_subject=_optional_str(item.get("note_subject"), f"Goal {goal_id} dependency note_subject"),
@@ -260,17 +258,20 @@ def _load_artifact_outputs(
             raise GoalConfigError(f"Invalid artifact output role for {goal_id}: {role!r}")
         if not isinstance(entry, dict):
             raise GoalConfigError(f"Goal {goal_id} artifact output {role} must be a table")
-        unknown = set(entry) - {"path", "type"}
+        unknown = set(entry) - {"description", "path", "type"}
         if unknown:
             raise GoalConfigError(f"Unknown artifact output field for {goal_id}.{role}: {sorted(unknown)[0]}")
+        description = entry.get("description")
         path_template = entry.get("path")
         artifact_type = entry.get("type")
+        if not isinstance(description, str) or not description:
+            raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing description")
         if not isinstance(path_template, str) or not path_template:
             raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing path")
         if not isinstance(artifact_type, str) or not artifact_type:
             raise GoalConfigError(f"Goal {goal_id} artifact output {role} missing type")
         _validate_artifact_path_template(path_template, schema=schema)
-        outputs.append(ArtifactOutputSpec(role=role, path_template=path_template, artifact_type=artifact_type))
+        outputs.append(ArtifactOutputSpec(role=role, description=description, path_template=path_template, artifact_type=artifact_type))
     return outputs
 
 

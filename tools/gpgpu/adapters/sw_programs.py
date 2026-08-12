@@ -21,8 +21,8 @@ def run_native(context: ExecutionContext) -> RunResult:
 
 def run_elf(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    abi_dir = _dependency_output(context, "abi", "runtime_header", artifact_type="c-header").parent
-    linker_script = _dependency_output(context, "abi", "linker_script", artifact_type="linker-script")
+    abi_dir = _dependency_output(context, "sw.abi", "runtime_header", artifact_type="c-header").parent
+    linker_script = _dependency_output(context, "sw.abi", "linker_script", artifact_type="linker-script")
     command = _make_command(
         program,
         context.artifact_dir,
@@ -40,7 +40,7 @@ def run_elf(context: ExecutionContext) -> RunResult:
 
 def run_image(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    elf_path = _dependency_output(context, "elf", "elf", artifact_type="riscv-elf")
+    elf_path = _dependency_output(context, "sw.program.elf", "elf", artifact_type="riscv-elf")
     command = _make_command(program, context.artifact_dir, "image", extra=(f"ELF_IN={elf_path}",))
     return _run_make_artifacts(
         goal_id=context.goal_id,

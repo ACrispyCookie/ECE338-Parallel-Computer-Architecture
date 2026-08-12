@@ -18,21 +18,20 @@ goals:
       - architecture.abi.data.base_word
       - architecture.abi.stack.per_lane_bytes
       - architecture.abi.stack.top_word
-      expected_outputs:
-      - generated GPGPU runtime header
-      - generated GPGPU linker script
-      - generated GPGPU ABI metadata
       artifact:
         input_globs:
         - config/architectures/{architecture}.yaml
         outputs:
           runtime_header:
+            description: generated GPGPU runtime header
             path: gpgpu_runtime.h
             type: c-header
           linker_script:
+            description: generated GPGPU linker script
             path: gpgpu.ld
             type: linker-script
           metadata:
+            description: generated GPGPU ABI metadata
             path: gpgpu_abi.json
             type: architecture-abi-metadata
     program:
@@ -43,8 +42,6 @@ goals:
         params:
         - program
         - program.optimization
-        expected_outputs:
-        - native reference executable artifact
         artifact:
           input_globs:
           - sw/programs/Makefile
@@ -52,6 +49,7 @@ goals:
           - sw/programs/{program}/*.h
           outputs:
             executable:
+              description: native reference executable artifact
               path: '{program}_x86'
               type: native-executable
       elf:
@@ -64,8 +62,6 @@ goals:
         - program.optimization
         - program.march
         - program.mabi
-        expected_outputs:
-        - RISC-V ELF artifact
         artifact:
           input_globs:
           - sw/programs/Makefile
@@ -77,14 +73,15 @@ goals:
           - sw/programs/{program}/fpga.py
           outputs:
             elf:
+              description: RISC-V ELF artifact
               path: '{program}.elf'
               type: riscv-elf
             map:
+              description: linker map artifact
               path: '{program}.map'
               type: linker-map
         dependencies:
-        - role: abi
-          goal: sw.abi
+        - goal: sw.abi
       image:
         kind: artifact
         public: true
@@ -95,9 +92,6 @@ goals:
         - program.optimization
         - program.march
         - program.mabi
-        expected_outputs:
-        - instruction-memory image artifact
-        - objdump artifact
         artifact:
           input_globs:
           - sw/programs/Makefile
@@ -109,14 +103,15 @@ goals:
           - sw/programs/{program}/fpga.py
           outputs:
             imem:
+              description: instruction-memory image artifact
               path: '{program}_instructions.mem'
               type: instruction-memory
             objdump:
+              description: objdump artifact
               path: '{program}_dump_real.asm'
               type: objdump
         dependencies:
-        - role: elf
-          goal: sw.program.elf
+        - goal: sw.program.elf
   hw:
     board:
       project:
@@ -130,8 +125,6 @@ goals:
         - rtl.imem_words
         - rtl.dmem_words
         - fpga.part
-        expected_outputs:
-        - board project artifact
       bitstream:
         kind: artifact
         public: true
@@ -144,11 +137,8 @@ goals:
         - rtl.dmem_words
         - fpga.part
         - fpga.synth.strategy
-        expected_outputs:
-        - bitstream artifact
         dependencies:
-        - role: project
-          goal: hw.board.project
+        - goal: hw.board.project
       program:
         kind: action
         public: true
@@ -160,8 +150,7 @@ goals:
         side_effects:
         - configure selected board FPGA fabric
         dependencies:
-        - role: bitstream
-          goal: hw.board.bitstream
+        - goal: hw.board.bitstream
       kernel:
         load:
           kind: action
@@ -174,10 +163,8 @@ goals:
           side_effects:
           - load selected program image into board memory
           dependencies:
-          - role: configured_board
-            goal: hw.board.program
-          - role: program_image
-            goal: sw.program.image
+          - goal: hw.board.program
+          - goal: sw.program.image
         run:
           kind: action
           public: true
@@ -188,8 +175,7 @@ goals:
           side_effects:
           - run loaded kernel on selected board
           dependencies:
-          - role: loaded_kernel
-            goal: hw.board.kernel.load
+          - goal: hw.board.kernel.load
     rtl:
       assemble:
         kind: artifact
@@ -199,8 +185,6 @@ goals:
         - architecture
         - rtl.imem_words
         - rtl.dmem_words
-        expected_outputs:
-        - RTL assembly fixture artifact
       sim_executable:
         kind: artifact
         public: false
@@ -210,8 +194,6 @@ goals:
         - rtl.sp_per_sm
         - rtl.imem_words
         - rtl.dmem_words
-        expected_outputs:
-        - RTL simulation executable artifact
   demo:
     run:
       kind: service
@@ -229,12 +211,10 @@ goals:
       side_effects:
       - start selected interactive demo service
       dependencies:
-      - role: native_reference
-        goal: sw.program.native
+      - goal: sw.program.native
         when:
           backend: fake
-      - role: loaded_kernel
-        goal: hw.board.kernel.load
+      - goal: hw.board.kernel.load
         note_kind: included
         note_subject: hw.board.kernel.load
         note_reason: backend=fpga-uart requires hardware program-image load
@@ -256,13 +236,9 @@ goals:
       - rtl.sp_per_sm
       - rtl.imem_words
       - rtl.dmem_words
-      expected_outputs:
-      - RTL check result
       dependencies:
-      - role: assembly_fixture
-        goal: hw.rtl.assemble
-      - role: sim_executable
-        goal: hw.rtl.sim_executable
+      - goal: hw.rtl.assemble
+      - goal: hw.rtl.sim_executable
     program:
       kind: check
       public: true
@@ -271,10 +247,6 @@ goals:
       - program
       - architecture
       - program.optimization
-      expected_outputs:
-      - program comparison check result
       dependencies:
-      - role: native_reference
-        goal: sw.program.native
-      - role: program_image
-        goal: sw.program.image
+      - goal: sw.program.native
+      - goal: sw.program.image

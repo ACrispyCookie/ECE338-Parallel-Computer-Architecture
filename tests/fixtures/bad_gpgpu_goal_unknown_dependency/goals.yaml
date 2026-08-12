@@ -8,5 +8,4 @@ goals:
         params:
         - program
         dependencies:
-        - role: missing
-          goal: missing.goal
+        - goal: missing.goal

@@ -163,7 +163,7 @@ class GraphRunTests(unittest.TestCase):
             )
 
         def image(context):
-            seen_elf_path.append(context.dependency_outputs["elf"]["elf"].path)
+            seen_elf_path.append(context.dependency_outputs["sw.program.elf"]["elf"].path)
             for output in context.declared_outputs.values():
                 output.path.write_text(f"{output.role}\n", encoding="utf-8")
             return RunResult(
@@ -251,7 +251,7 @@ class GraphRunTests(unittest.TestCase):
 
         def image(context):
             calls.append(context.goal_id)
-            seen_elf_path.append(context.dependency_outputs["elf"]["elf"].path)
+            seen_elf_path.append(context.dependency_outputs["sw.program.elf"]["elf"].path)
             for output in context.declared_outputs.values():
                 output.path.write_text(f"{output.role}\n", encoding="utf-8")
             return RunResult(goal_id=context.goal_id, command=("fake", "image"), returncode=0, produced=tuple(context.declared_outputs.values()))
@@ -537,7 +537,7 @@ class ProgramAdapterTests(unittest.TestCase):
         ids = [node.goal_id for node in plan.nodes]
 
         self.assertEqual(ids, ["sw.abi", "sw.program.elf"])
-        self.assertEqual(dict(plan.root.dependency_roles)["abi"], plan.nodes[0].key)
+        self.assertEqual(plan.root.dependencies, (plan.nodes[0].key,))
 
     def test_elf_adapter_passes_generated_abi_files_to_make(self):
         config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
