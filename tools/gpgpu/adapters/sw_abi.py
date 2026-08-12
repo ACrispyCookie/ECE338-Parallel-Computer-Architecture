@@ -98,7 +98,7 @@ def run_sw_abi(context: ExecutionContext) -> RunResult:
 
     return RunResult(
         goal_id=context.goal_id,
-        command=("generate-sw-abi", model.architecture),
+        command=("python-adapter", context.goal_id),
         returncode=0,
         produced=tuple(outputs.values()),
     )
@@ -154,46 +154,37 @@ def _length(value: int) -> str:
 
 def _template_variables(model: AbiModel, resolved_values: Mapping[str, object] | None = None) -> dict[str, str]:
     variables = {key: str(value) for key, value in (resolved_values or {}).items()}
-    variables.update({
-        "architecture": model.architecture,
-        "architecture.rtl.thread.count": str(model.thread_count),
-        "architecture.rtl.thread.id_register": model.thread_id_register,
-        "architecture.memory.word_bytes": str(model.word_bytes),
-        "architecture.memory.imem.origin": str(model.imem_origin),
+    derived = {
         "architecture.memory.imem.origin.hex": _hex(model.imem_origin),
-        "architecture.memory.imem.words": str(model.imem_words),
         "architecture.memory.imem.bytes": str(model.imem_bytes),
         "architecture.memory.imem.bytes.length": _length(model.imem_bytes),
-        "architecture.memory.dmem.origin": str(model.dmem_origin),
         "architecture.memory.dmem.origin.hex": _hex(model.dmem_origin),
-        "architecture.memory.dmem.words": str(model.dmem_words),
         "architecture.memory.dmem.bytes": str(model.dmem_bytes),
         "architecture.memory.dmem.bytes.length": _length(model.dmem_bytes),
-        "architecture.abi.args.base_word": str(model.args_base_word),
         "architecture.abi.args.base_byte": str(model.args_base_byte),
         "architecture.abi.args.base_byte.hex": _hex(model.args_base_byte),
-        "architecture.abi.args.words": str(model.args_words),
         "architecture.abi.args.end_word": str(model.args_end_word),
         "architecture.abi.args.end_word.last": str(model.args_end_word - 1),
         "architecture.abi.args.end_byte": str(model.args_end_byte),
         "architecture.abi.args.end_byte.hex": _hex(model.args_end_byte),
-        "architecture.abi.data.base_word": str(model.data_base_word),
         "architecture.abi.data.base_byte": str(model.data_base_byte),
         "architecture.abi.data.base_byte.hex": _hex(model.data_base_byte),
         "architecture.abi.data.limit_word": str(model.data_limit_word),
         "architecture.abi.data.limit_byte": str(model.data_limit_byte),
         "architecture.abi.data.limit_byte.hex": _hex(model.data_limit_byte),
-        "architecture.abi.stack.per_lane_bytes": str(model.stack_per_lane_bytes),
         "architecture.abi.stack.per_lane_words": str(model.stack_per_lane_words),
         "architecture.abi.stack.per_lane_bytes.shift": str(model.stack_stride_shift),
-        "architecture.abi.stack.top_word": str(model.stack_top_word),
         "architecture.abi.stack.top_word.last": str(model.stack_top_word - 1),
         "architecture.abi.stack.top_byte": str(model.stack_top_byte),
         "architecture.abi.stack.top_byte.hex": _hex(model.stack_top_byte),
         "architecture.abi.stack.bottom_word": str(model.stack_bottom_word),
         "architecture.abi.stack.bottom_byte": str(model.stack_bottom_byte),
         "architecture.abi.stack.bottom_byte.hex": _hex(model.stack_bottom_byte),
-    })
+    }
+    overlap = sorted(set(variables) & set(derived))
+    if overlap:
+        raise ValueError(f"derived ABI template variables overlap resolved config: {', '.join(overlap)}")
+    variables.update(derived)
     return variables
 
 

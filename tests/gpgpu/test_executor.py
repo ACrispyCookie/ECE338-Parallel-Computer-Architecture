@@ -547,6 +547,19 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["abi"]["data"]["limit_byte"], 0x1800)
         self.assertEqual(metadata["abi"]["stack"]["bottom_byte"], 0x1800)
 
+    def test_sw_abi_adapter_reports_python_adapter_command(self):
+        out_dir = self.artifact_dir("sw.abi")
+        shutil.rmtree(out_dir, ignore_errors=True)
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
+        plan = Planner(config, repo_root=ROOT).plan("sw.abi")
+
+        summary = Executor(config, repo_root=ROOT).run_plan(plan)
+
+        self.assertEqual(summary.returncode, 0)
+        result = summary.records[-1].result
+        assert result is not None
+        self.assertEqual(result.command, ("python-adapter", "sw.abi"))
+
     def test_sw_abi_templates_are_artifact_inputs_without_architecture_manifest_glob(self):
         from tools.gpgpu.artifacts import resolve_artifact_inputs
 
@@ -613,6 +626,51 @@ class ProgramAdapterTests(unittest.TestCase):
             rendered = sw_abi._render_template(template, sw_abi._template_variables(model, config.values))
 
         self.assertEqual(rendered, "sp=32\n")
+
+    def test_sw_abi_template_variables_do_not_overwrite_resolved_config_values(self):
+        from tools.gpgpu.adapters import sw_abi
+
+        model = sw_abi.AbiModel(
+            architecture="gpgpu32",
+            word_bytes=4,
+            thread_count=32,
+            thread_id_register="x31",
+            imem_origin=0,
+            imem_words=2048,
+            dmem_origin=0,
+            dmem_words=2048,
+            args_base_word=16,
+            args_words=4,
+            data_base_word=1024,
+            stack_per_lane_bytes=64,
+            stack_top_word=2048,
+        )
+
+        variables = sw_abi._template_variables(model, {"architecture.rtl.thread.count": 64})
+
+        self.assertEqual(variables["architecture.rtl.thread.count"], "64")
+
+    def test_sw_abi_template_variables_reject_derived_config_overlap(self):
+        from tools.gpgpu.adapters import sw_abi
+
+        model = sw_abi.AbiModel(
+            architecture="gpgpu32",
+            word_bytes=4,
+            thread_count=32,
+            thread_id_register="x31",
+            imem_origin=0,
+            imem_words=2048,
+            dmem_origin=0,
+            dmem_words=2048,
+            args_base_word=16,
+            args_words=4,
+            data_base_word=1024,
+            stack_per_lane_bytes=64,
+            stack_top_word=2048,
+        )
+
+        with self.assertRaisesRegex(ValueError, "derived ABI template variables overlap resolved config"):
+            sw_abi._template_variables(model, {"architecture.memory.imem.bytes": 8192})
 
     def test_sw_abi_unknown_template_variable_fails_cli_without_traceback(self):
         from tools.gpgpu.adapters import sw_abi
