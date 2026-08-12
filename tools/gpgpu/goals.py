@@ -86,10 +86,29 @@ def load_goals(path: str | Path, *, schema: Mapping[str, SettingSpec]) -> dict[s
         raise GoalConfigError(f"{goals_path}: missing [goals] table")
 
     loaded: dict[str, GoalDefinition] = {}
-    for goal_id, entry in goals_data.items():
+    for goal_id, entry in _flatten_goal_definitions(goals_data).items():
         loaded[goal_id] = _load_goal(goal_id, entry, schema=schema)
     _validate_goal_references(loaded, schema=schema)
     return loaded
+
+
+def _flatten_goal_definitions(goals_data: dict[str, object]) -> dict[str, object]:
+    flat: dict[str, object] = {}
+
+    def visit(prefix: str, value: object) -> None:
+        if not isinstance(value, dict):
+            flat[prefix] = value
+            return
+        if "kind" in value:
+            flat[prefix] = value
+            return
+        for key, item in value.items():
+            child = f"{prefix}.{key}" if prefix else str(key)
+            visit(child, item)
+
+    for key, value in goals_data.items():
+        visit(str(key), value)
+    return flat
 
 
 def _load_goal(goal_id: str, entry: object, *, schema: Mapping[str, SettingSpec]) -> GoalDefinition:

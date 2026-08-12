@@ -1,7 +1,9 @@
 goals:
-  sw.program.elf:
-    kind: artifact
-    public: true
-    description: bad
-    params:
-    - missing.setting
+  sw:
+    program:
+      elf:
+        kind: artifact
+        public: true
+        description: bad
+        params:
+        - missing.setting

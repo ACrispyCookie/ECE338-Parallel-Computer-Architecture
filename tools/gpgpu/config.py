@@ -65,7 +65,7 @@ def load_schema(path: str | Path) -> dict[str, SettingSpec]:
     allowed_fields = {"type", "choices", "default", "manifest_dir"}
     valid_types = {"str", "int", "enum"}
     loaded: dict[str, SettingSpec] = {}
-    for key, entry in settings.items():
+    for key, entry in _flatten_schema_settings(settings).items():
         if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", key):
             raise ConfigError(f"Invalid setting name: {key!r}")
         if not isinstance(entry, dict):
@@ -103,6 +103,32 @@ def load_schema(path: str | Path) -> dict[str, SettingSpec]:
         _coerce_value(spec, spec.default)
         loaded[key] = spec
     return loaded
+
+
+def _flatten_schema_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    allowed_fields = {"type", "choices", "default", "manifest_dir"}
+    flat: dict[str, Any] = {}
+
+    def visit(prefix: str, value: Any) -> None:
+        if not isinstance(value, dict):
+            flat[prefix] = value
+            return
+        is_setting = any(field in value for field in allowed_fields)
+        if is_setting:
+            setting_entry = {}
+            for key, item in value.items():
+                if key in allowed_fields or not isinstance(item, dict):
+                    setting_entry[key] = item
+            flat[prefix] = setting_entry
+        for key, item in value.items():
+            if key in allowed_fields or not isinstance(item, dict):
+                continue
+            child = f"{prefix}.{key}" if prefix else str(key)
+            visit(child, item)
+
+    for key, value in settings.items():
+        visit(str(key), value)
+    return flat
 
 
 def _coerce_value(spec: SettingSpec, raw_value: Any) -> Any:

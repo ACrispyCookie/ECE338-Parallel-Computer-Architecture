@@ -225,8 +225,8 @@ Accepted Milestone 20 direction:
 Accepted Milestone 21 direction:
 
 - Substantial control-plane definitions belong in declarative project data rather than embedded Python tables.
-- `config/schema.yaml` owns setting definitions, including enum choices and manifest-selection metadata.
-- `config/goals.yaml` owns goal definitions, dependencies, conditional notes, and artifact input/output specs.
+- `config/schema.yaml` owns setting definitions, including enum choices and manifest-selection metadata. The file is structurally nested; the loader flattens it into canonical dotted setting IDs such as `program.optimization`.
+- `config/goals.yaml` owns goal definitions, dependencies, conditional notes, and artifact input/output specs. The file is structurally nested; the loader flattens it into canonical dotted goal IDs such as `sw.program.image`.
 - Python owns typed dataclasses, YAML loading, validation, planning, execution, and artifact/cache algorithms.
 - Artifact validation compares recorded metadata against the current declarative input/output spec before trusting hashes.
 - `Executor._input_paths_for()` is removed; software input selection is no longer hardcoded in the executor.

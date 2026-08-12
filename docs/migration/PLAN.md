@@ -540,8 +540,8 @@ Objective: move substantial control-plane definitions out of Python source and i
 
 Scope:
 
-- `config/schema.yaml` declares settings, types, defaults, enum choices, and manifest selectors;
-- `config/goals.yaml` declares goals, params, visibility, dependencies, notes, and artifact input/output specs;
+- `config/schema.yaml` declares settings, types, defaults, enum choices, and manifest selectors in a nested YAML structure flattened by the loader into canonical dotted setting IDs;
+- `config/goals.yaml` declares goals, params, visibility, dependencies, notes, and artifact input/output specs in a nested YAML structure flattened by the loader into canonical dotted goal IDs;
 - `tools/gpgpu/config.py` loads and validates schema YAML instead of owning a hardcoded schema table;
 - `tools/gpgpu/goals.py` loads and validates goal YAML instead of owning a hardcoded goal table;
 - `tools/gpgpu/artifacts.py` resolves declarative input/output specs and compares current expected input/output sets against metadata;
@@ -740,37 +740,17 @@ Domain adapter modules own command construction and artifact verification for th
 
 Long-term direction: executor should walk a validated planned graph in dependency order, cache-skip only compatible artifact goals after a dedicated cache-execution milestone, never cache-skip action goals, and manage service lifecycles explicitly.
 
-## Future `config.py` direction
+## Current `config.py` responsibility
 
-`config.py` currently owns schema loading/validation, YAML loading, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. The setting definitions themselves live in `config/schema.yaml`.
+`config.py` owns schema loading/validation, nested YAML loading/flattening, precedence resolution, type coercion, provenance tracking, and selected-manifest loading. The setting definitions themselves live in nested `config/schema.yaml`.
 
-Near-term rule:
+Rules:
 
 - do not add placeholder settings without real planner or adapter behavior;
 - document legacy mismatches instead of silently changing Makefile semantics;
 - keep unknown and type-invalid settings as immediate errors.
 
-Medium-term direction:
-
-```text
-tools/gpgpu/config/
-  __init__.py
-  schema.py
-  resolver.py
-  provenance.py
-  yaml_loader.py
-  types.py
-```
-
-Responsibilities:
-
-- `schema.py`: known settings, types, defaults, enum choices, and manifest selectors;
-- `resolver.py`: precedence order and selected-manifest application;
-- `provenance.py`: source labels and explain-format helpers;
-- `yaml_loader.py`: YAML reading, flattening, validation;
-- `types.py`: enums, coercion helpers, typed values.
-
-Future decision: decide whether typed planner settings are passed into legacy Make, for example `OPT`, `MARCH`, and `MABI`, or whether new toolchain behavior moves to a new adapter-controlled build path. Defer this until after `sw.program.image` exposes the objdump and memory-format boundary.
+Open decision: decide whether typed planner settings are passed into legacy Make, for example `OPT`, `MARCH`, and `MABI`, or whether new toolchain behavior moves to a new adapter-controlled build path. This should be resolved as part of the actual `sw.program.*` adapter behavior, not deferred as a structural placeholder.
 
 ## Intended next milestones
 

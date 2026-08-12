@@ -7,6 +7,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
@@ -114,6 +116,17 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertNotIn("scope =", source)
         self.assertNotIn("scope:", (ROOT / "tools" / "gpgpu" / "config.py").read_text())
 
+    def test_schema_yaml_uses_nested_setting_structure(self):
+        schema = yaml.safe_load((ROOT / "config" / "schema.yaml").read_text())
+        settings = schema["settings"]
+
+        self.assertNotIn("program.optimization", settings)
+        self.assertNotIn("rtl.sp_per_sm", settings)
+        self.assertIn("optimization", settings["program"])
+        self.assertIn("sp_per_sm", settings["rtl"])
+        self.assertIn("synth", settings["fpga"])
+        self.assertIn("configure_policy", settings["board"])
+
     def test_manifest_selectors_are_declared_in_schema(self):
         manifest_selectors = {
             key: spec.manifest_dir
@@ -147,6 +160,15 @@ class PlannerFoundationTests(unittest.TestCase):
         self.assertTrue(goals_path.exists())
         self.assertNotIn("GOALS: dict[str, GoalDefinition] = {", (ROOT / "tools" / "gpgpu" / "goals.py").read_text())
         self.assertEqual(len(GOALS), 13)
+
+    def test_goals_yaml_uses_nested_goal_structure(self):
+        goals = yaml.safe_load((ROOT / "config" / "goals.yaml").read_text())["goals"]
+
+        self.assertNotIn("sw.program.native", goals)
+        self.assertNotIn("hw.board.bitstream", goals)
+        self.assertIn("native", goals["sw"]["program"])
+        self.assertIn("bitstream", goals["hw"]["board"])
+        self.assertIn("run", goals["demo"])
 
     def test_goal_loader_rejects_unknown_dependency(self):
         from tools.gpgpu.goals import GoalConfigError, load_goals
