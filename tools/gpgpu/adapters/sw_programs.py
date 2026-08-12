@@ -9,7 +9,8 @@ from tools.gpgpu.executor import ExecuteError, ExecutionContext, ProducedArtifac
 
 def run_native(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    command = _make_command(program, context.artifact_dir, "native")
+    abi_dir = _dependency_output(context, "sw.abi", "runtime_header").parent
+    command = _make_command(program, context.artifact_dir, "native", extra=(f"ABI_INCLUDE_DIR={abi_dir}",))
     return _run_make_artifacts(
         goal_id=context.goal_id,
         command=command,

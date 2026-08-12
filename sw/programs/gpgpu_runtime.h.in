@@ -12,7 +12,7 @@ extern char __stack_top[];
 
 #define GPGPU_ARGS   ((volatile int *)__gpu_args_base)
 
-#define GPGPU_NUM_CORES    ${architecture.rtl.thread.count}u
+#define GPGPU_NUM_CORES    ${architecture.rtl.sp_per_sm}u
 #define GPGPU_STACK_STRIDE ${architecture.abi.stack.per_lane_bytes}u
 
 static inline __attribute__((always_inline)) unsigned int gpgpu_thread_id(void)

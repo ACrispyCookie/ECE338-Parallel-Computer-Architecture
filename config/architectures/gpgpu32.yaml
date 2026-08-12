@@ -1,27 +1,27 @@
 defaults:
   architecture:
     name: gpgpu32
-    # rtl:
-    #   sp_per_sm: 32
-    #   thread:
-    #     count: 32
-    #     id_register: x31
-    # memory:
-    #   imem_words: 2048
-    #   dmem_words: 2048
-    #   imem:
-    #     origin: 0x00000000
-    #     words: 2048
-    #   dmem:
-    #     origin: 0x00000000
-    #     words: 2048
-    #   word_bytes: 4
-    # abi:
-    #   args:
-    #     base_word: 16
-    #     words: 4
-    #   data:
-    #     base_word: 1024
-    #   stack:
-    #     per_lane_bytes: 64
-    #     top_word: 2048
+    rtl:
+      sp_per_sm: 32
+      thread:
+        count: 32
+        id_register: x31
+    memory:
+      imem_words: 2048
+      dmem_words: 2048
+      imem:
+        origin: 0x00000000
+        words: 2048
+      dmem:
+        origin: 0x00000000
+        words: 2048
+      word_bytes: 4
+    abi:
+      args:
+        base_word: 16
+        words: 4
+      data:
+        base_word: 1024
+      stack:
+        per_lane_bytes: 64
+        top_word: 2048

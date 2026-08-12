@@ -109,7 +109,7 @@ Do not rename these files until wrappers/import compatibility and documentation 
 
 - `README.md` describes stale `sw/programs/fpga_run.py` adapter hooks.
 - `README.md` uses stale options such as direct `--steps`/`--runs` on `sw/programs/run.sh`.
-- `programs/Readme.md` describes older output names.
+- `sw/programs/README.md` documents the current program workflow; older `programs/Readme.md` naming is retired.
 - `demo/README.md` still describes nbody 3D as future work even though baseline contains nbody-3d files.
 - `sw/host/linux/host.py (deleted in Milestone 8)` appears stale relative to the newer UART monitor protocol.
 
@@ -128,8 +128,8 @@ Do not rename these files until wrappers/import compatibility and documentation 
 
 - `sw/host/baremetal/gpgpu_uart.py`
 - `sw/programs/fpga_run.py`
-- `programs/gpgpu_runtime.h`
-- `programs/gpgpu.ld`
+- `sw/programs/gpgpu_runtime.h.in` as the editable runtime-header template for generated `sw.abi` outputs.
+- `sw/programs/gpgpu.ld.in` as the editable linker-script template for generated `sw.abi` outputs.
 - `test/assembler.py`
 - `test/expected_generator.py`
 - `test/host_uart_helper.py`

@@ -132,7 +132,7 @@ class CleanerTests(unittest.TestCase):
 
         summary = Cleaner(repo_root=ROOT).clean_plan(plan, deps=True, dry_run=True)
 
-        self.assertEqual([record.node.goal_id for record in summary.records], ["sw.program.native"])
+        self.assertEqual([record.node.goal_id for record in summary.records], ["sw.abi", "sw.program.native"])
 
     def test_format_clean_summary_reports_dry_run_counts(self):
         from tools.gpgpu.cleaner import Cleaner, format_clean_summary

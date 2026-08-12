@@ -49,6 +49,8 @@ goals:
             executable:
               description: native reference executable artifact
               path: '{program}_x86'
+        dependencies:
+        - goal: sw.abi
       elf:
         kind: artifact
         public: true

@@ -189,18 +189,34 @@ class GraphRunTests(unittest.TestCase):
 
         config = self.config()
         initial = Planner(config, repo_root=ROOT).plan("sw.program.native")
+        abi_node = initial.nodes[0]
+        native_node = initial.root
+        abi_dir = artifact_dir(ROOT, abi_node)
         out_dir = artifact_dir(ROOT, initial.root)
+        shutil.rmtree(ROOT / "out" / "artifacts" / "sw.abi", ignore_errors=True)
         shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.native", ignore_errors=True)
+        abi_dir.mkdir(parents=True, exist_ok=True)
+        abi_outputs = resolve_artifact_outputs(abi_dir, abi_node, config)
+        for output in abi_outputs:
+            output.path.write_text("abi output\n", encoding="utf-8")
+        write_artifact_metadata(
+            abi_dir,
+            node=abi_node,
+            produced=abi_outputs,
+            dependency_identities={},
+            input_paths=resolve_artifact_inputs(ROOT, abi_node, config),
+            repo_root=ROOT,
+        )
         out_dir.mkdir(parents=True, exist_ok=True)
-        outputs = resolve_artifact_outputs(out_dir, initial.root, config)
+        outputs = resolve_artifact_outputs(out_dir, native_node, config)
         for output in outputs:
             output.path.write_text("native output\n", encoding="utf-8")
         write_artifact_metadata(
             out_dir,
-            node=initial.root,
+            node=native_node,
             produced=outputs,
-            dependency_identities={},
-            input_paths=resolve_artifact_inputs(ROOT, initial.root, config),
+            dependency_identities={"sw.abi": abi_node.identity},
+            input_paths=resolve_artifact_inputs(ROOT, native_node, config),
             repo_root=ROOT,
         )
         calls: list[str] = []
@@ -214,12 +230,13 @@ class GraphRunTests(unittest.TestCase):
             self.assertIn("CACHE HIT", plan.format_plan())
             summary = Executor(config, adapters={"sw.program.native": native}).run_plan(plan)
         finally:
+            shutil.rmtree(ROOT / "out" / "artifacts" / "sw.abi", ignore_errors=True)
             shutil.rmtree(ROOT / "out" / "artifacts" / "sw.program.native", ignore_errors=True)
 
         self.assertEqual(summary.returncode, 0)
         self.assertEqual(calls, [])
         self.assertEqual(summary.completed_count, 0)
-        self.assertEqual(summary.skipped_count, 1)
+        self.assertEqual(summary.skipped_count, 2)
         self.assertEqual(summary.records[-1].status, "skipped")
         self.assertEqual(summary.records[-1].reason, "artifact cache hit")
 
@@ -415,7 +432,7 @@ class GraphRunTests(unittest.TestCase):
         self.assertIn("╭─ [1/1] sw.program.native", rendered)
         self.assertIn("\r\033[2K│  ✓ completed", rendered)
         self.assertIn("│  produced: nbody_x86", rendered)
-        self.assertIn("╰─ 1 completed, 0 skipped, 0 failed", rendered)
+        self.assertIn("╰─ 1 completed, 1 skipped, 0 failed", rendered)
         self.assertNotIn("running fake native\n✓", rendered)
 
     def test_interactive_reporter_uses_richer_color_for_goal_area(self):
@@ -457,7 +474,8 @@ class GraphRunTests(unittest.TestCase):
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("gpgpu run sw.program.native", rendered)
         self.assertIn("✓ sw.program.native", rendered)
-        self.assertIn("Summary: 1 completed, 0 skipped, 0 failed", rendered)
+        self.assertIn("✓ sw.abi", rendered)
+        self.assertIn("Summary: 2 completed, 0 skipped, 0 failed", rendered)
         self.assertNotIn("Run: sw.program.native", rendered)
 
 
@@ -707,6 +725,42 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(ids, ["sw.abi", "sw.program.elf"])
         self.assertEqual(plan.root.dependencies, (plan.nodes[0].key,))
 
+    def test_sw_program_native_depends_on_generated_abi(self):
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
+        plan = Planner(config, repo_root=ROOT).plan("sw.program.native")
+        ids = [node.goal_id for node in plan.nodes]
+
+        self.assertEqual(ids, ["sw.abi", "sw.program.native"])
+        self.assertEqual(plan.root.dependencies, (plan.nodes[0].key,))
+
+    def test_native_adapter_passes_generated_abi_include_dir_to_make(self):
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
+        plan = Planner(config, repo_root=ROOT).plan("sw.program.native")
+        seen_command: list[tuple[str, ...]] = []
+
+        def abi(context):
+            for output in context.declared_outputs.values():
+                output.path.write_text("generated\n")
+            return RunResult(goal_id=context.goal_id, command=("fake", "abi"), returncode=0, produced=tuple(context.declared_outputs.values()))
+
+        def native(context):
+            module = __import__("tools.gpgpu.adapters.sw_programs", fromlist=["run_native"])
+            with mock.patch.object(module.subprocess, "run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = ""
+                run.return_value.stderr = ""
+                command = module.run_native(context).command
+                seen_command.append(command)
+            for output in context.declared_outputs.values():
+                output.path.write_text(output.role)
+            return RunResult(goal_id=context.goal_id, command=command, returncode=0, produced=tuple(context.declared_outputs.values()))
+
+        summary = Executor(config, adapters={"sw.abi": abi, "sw.program.native": native}).run_plan(plan)
+
+        self.assertEqual(summary.returncode, 0)
+        command = seen_command[0]
+        self.assertIn("ABI_INCLUDE_DIR=" + str(artifact_dir(ROOT, plan.nodes[0])), command)
+
     def test_elf_adapter_passes_generated_abi_files_to_make(self):
         config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
         plan = Planner(config, repo_root=ROOT).plan("sw.program.elf")
@@ -767,7 +821,9 @@ class ProgramAdapterTests(unittest.TestCase):
         rendered = stdout.getvalue()
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("gpgpu run sw.program.native", rendered)
-        self.assertIn("[1/1] sw.program.native", rendered)
+        self.assertIn("[1/2] sw.abi", rendered)
+        self.assertIn("[2/2] sw.program.native", rendered)
+        self.assertIn("✓ sw.abi", rendered)
         self.assertIn("✓ sw.program.native", rendered)
         self.assertIn("produced nbody_x86", rendered)
         self.assertIn(f"out/artifacts/sw.program.native/{out_dir.name}", rendered)

@@ -251,7 +251,7 @@ Accepted Milestone 22 direction:
 Accepted current direction:
 
 - `sw.abi` is an internal artifact goal that generates `gpgpu_runtime.h`, `gpgpu.ld`, and `gpgpu_abi.json` from selected `architecture.*` ABI settings.
-- `sw.abi` uses editable templates at `sw/programs/gpgpu_runtime.h.in` and `sw/programs/gpgpu.ld.in`; the checked-in legacy `sw/programs/gpgpu_runtime.h` and `sw/programs/gpgpu.ld` remain as compatibility/reference files.
+- `sw.abi` uses editable templates at `sw/programs/gpgpu_runtime.h.in` and `sw/programs/gpgpu.ld.in`; the generated header/linker artifacts are the active ABI inputs for program build goals.
 - `sw.abi` artifact inputs are the template files. The selected architecture manifest is not an input glob because its resolved values are already explicit `sw.abi` params.
 - `sw.program.elf` depends on `sw.abi` and consumes the generated runtime header and linker script by dependency goal id/output role.
 - The Makefile remains the software compatibility backend, but now accepts `ABI_INCLUDE_DIR`, `RUNTIME_HEADER`, and overridable `LINKER_SCRIPT` variables so generated ABI files are used without moving generated files into source directories.
