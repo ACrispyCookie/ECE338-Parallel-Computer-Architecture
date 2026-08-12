@@ -21,7 +21,14 @@ def run_native(context: ExecutionContext) -> RunResult:
 
 def run_elf(context: ExecutionContext) -> RunResult:
     program = str(context.config.get("program"))
-    command = _make_command(program, context.artifact_dir, "elf")
+    abi_dir = _dependency_output(context, "abi", "runtime_header", artifact_type="c-header").parent
+    linker_script = _dependency_output(context, "abi", "linker_script", artifact_type="linker-script")
+    command = _make_command(
+        program,
+        context.artifact_dir,
+        "elf",
+        extra=(f"ABI_INCLUDE_DIR={abi_dir}", f"LINKER_SCRIPT={linker_script}"),
+    )
     return _run_make_artifacts(
         goal_id=context.goal_id,
         command=command,

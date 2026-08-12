@@ -1,4 +1,4 @@
-#include "../gpgpu_runtime.h"
+#include "gpgpu_runtime.h"
 #include "nbody-3d.h"
 
 #include <stdint.h>

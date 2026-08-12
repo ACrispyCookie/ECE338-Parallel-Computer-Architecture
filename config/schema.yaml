@@ -3,6 +3,60 @@ settings:
     type: str
     default: gpgpu32
     manifest_dir: architectures
+    rtl:
+      sp_per_sm:
+        type: int
+        default: 32
+      thread:
+        count:
+          type: int
+          default: 32
+        id_register:
+          type: str
+          default: x31
+    memory:
+      imem_words:
+        type: int
+        default: 2048
+      dmem_words:
+        type: int
+        default: 2048
+      word_bytes:
+        type: int
+        default: 4
+      imem:
+        origin:
+          type: int
+          default: 0
+        words:
+          type: int
+          default: 2048
+      dmem:
+        origin:
+          type: int
+          default: 0
+        words:
+          type: int
+          default: 2048
+    abi:
+      args:
+        base_word:
+          type: int
+          default: 16
+        words:
+          type: int
+          default: 4
+      data:
+        base_word:
+          type: int
+          default: 1024
+      stack:
+        per_lane_bytes:
+          type: int
+          default: 64
+        top_word:
+          type: int
+          default: 2048
   board_type:
     type: str
     default: zynq7000-zedboard

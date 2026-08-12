@@ -1,4 +1,4 @@
-#include "../gpgpu_runtime.h"
+#include "gpgpu_runtime.h"
 #include "mandelbrot.h"
 
 #define CORES GPGPU_NUM_CORES

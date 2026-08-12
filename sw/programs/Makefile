@@ -2,8 +2,11 @@
 CROSS_PREFIX ?= $(shell if command -v riscv64-unknown-elf-gcc >/dev/null 2>&1; then printf riscv64-unknown-elf; elif command -v riscv-none-elf-gcc >/dev/null 2>&1; then printf riscv-none-elf; else printf riscv64-unknown-elf; fi)
 CC = $(CROSS_PREFIX)-gcc
 OBJDUMP = $(CROSS_PREFIX)-objdump
-LINKER_SCRIPT = gpgpu.ld
+LINKER_SCRIPT ?= gpgpu.ld
+ABI_INCLUDE_DIR ?= .
+RUNTIME_HEADER ?= $(ABI_INCLUDE_DIR)/gpgpu_runtime.h
 CFLAGS = -O2 -march=rv32im -mabi=ilp32 \
+          -I$(ABI_INCLUDE_DIR) \
           -ffreestanding -fno-builtin \
           -fomit-frame-pointer -ffixed-x31 \
           -ffunction-sections -fdata-sections \
@@ -15,7 +18,7 @@ LDFLAGS = -nostdlib -nostartfiles \
 
 # --- Native (x86 Linux) Compiler Variables ---
 NATIVE_CC = gcc
-NATIVE_CFLAGS = -O2
+NATIVE_CFLAGS = -O2 -I$(ABI_INCLUDE_DIR)
 
 PROG ?= nbody
 
@@ -61,7 +64,7 @@ image: $(MEM)
 # ==========================================
 # NATIVE x86 BUILD TARGET
 # ==========================================
-$(NATIVE_EXE): $(NATIVE_SRC)
+$(NATIVE_EXE): $(NATIVE_SRC) $(RUNTIME_HEADER)
 	@mkdir -p $(dir $@)
 	@echo "Compiling $(PROG) for x86 Native Linux..."
 	@$(NATIVE_CC) $(NATIVE_CFLAGS) -o $@ $<
@@ -122,7 +125,7 @@ $(MEM): $(DUMP_ASM)
 # ==========================================
 # Compile C -> ELF
 # ==========================================
-$(ELF): $(SRC) $(LINKER_SCRIPT)
+$(ELF): $(SRC) $(LINKER_SCRIPT) $(RUNTIME_HEADER)
 	@mkdir -p $(dir $@)
 	@echo "Compiling $(PROG) for RISC-V..."
 	@$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)

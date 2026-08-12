@@ -1,4 +1,4 @@
-#include "../gpgpu_runtime.h"
+#include "gpgpu_runtime.h"
 #include "nbody.h"
 
 #define CORES GPGPU_NUM_CORES

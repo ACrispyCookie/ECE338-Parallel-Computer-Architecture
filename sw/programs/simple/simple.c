@@ -4,7 +4,7 @@
 int indexes_array[CORES] = {0};
 int ten_array[CORES] = {0};
 
-#include "../gpgpu_runtime.h"
+#include "gpgpu_runtime.h"
 
 __attribute__((noinline, used, patchable_function_entry(1, 0)))
 void main(void)

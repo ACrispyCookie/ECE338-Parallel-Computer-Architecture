@@ -1,5 +1,40 @@
 goals:
   sw:
+    abi:
+      kind: artifact
+      public: false
+      description: Generate software ABI files for the selected GPGPU architecture.
+      params:
+      - architecture
+      - architecture.rtl.thread.count
+      - architecture.rtl.thread.id_register
+      - architecture.memory.word_bytes
+      - architecture.memory.imem.origin
+      - architecture.memory.imem.words
+      - architecture.memory.dmem.origin
+      - architecture.memory.dmem.words
+      - architecture.abi.args.base_word
+      - architecture.abi.args.words
+      - architecture.abi.data.base_word
+      - architecture.abi.stack.per_lane_bytes
+      - architecture.abi.stack.top_word
+      expected_outputs:
+      - generated GPGPU runtime header
+      - generated GPGPU linker script
+      - generated GPGPU ABI metadata
+      artifact:
+        input_globs:
+        - config/architectures/{architecture}.yaml
+        outputs:
+          runtime_header:
+            path: gpgpu_runtime.h
+            type: c-header
+          linker_script:
+            path: gpgpu.ld
+            type: linker-script
+          metadata:
+            path: gpgpu_abi.json
+            type: architecture-abi-metadata
     program:
       native:
         kind: artifact
@@ -47,6 +82,9 @@ goals:
             map:
               path: '{program}.map'
               type: linker-map
+        dependencies:
+        - role: abi
+          goal: sw.abi
       image:
         kind: artifact
         public: true

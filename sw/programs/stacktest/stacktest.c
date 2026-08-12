@@ -2,7 +2,7 @@
 
 #ifdef __riscv
 
-#include "../gpgpu_runtime.h"
+#include "gpgpu_runtime.h"
 
 __attribute__((noinline, used, patchable_function_entry(1, 0))) // patchable adds nop
 void main(void)

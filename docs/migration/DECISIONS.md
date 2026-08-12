@@ -205,7 +205,7 @@ Accepted Milestone 18 direction:
 
 Accepted Milestone 19 direction:
 
-- The current branch has a real planner/executor/artifact foundation plus three software compatibility adapters, but most original hardware, RTL, check, demo, UART, Vivado, and visualization goals remain planned-only.
+- The current branch has a real planner/executor/artifact foundation plus `sw.abi` and three software compatibility adapters, but most original hardware, RTL, check, demo, UART, Vivado, and visualization goals remain planned-only.
 - `docs/migration/CURRENT_STATE.md` is the current implementation map for non-test source files, goal coverage, data structures, build-system flow, and transitional-code inventory.
 - Cleanup should precede deeper adapter expansion where the foundation has known ambiguity: repo-root resolution, check-goal params, declarative artifact specs, strict adapter output contracts, and command/tool fingerprints.
 - Transitional implementation pieces should either be documented as temporary or moved into declarative metadata before becoming precedent for hardware/demo/check workflows.
@@ -245,7 +245,16 @@ Accepted Milestone 22 direction:
 - An artifact adapter returning success is not sufficient: the executor requires every declared output to exist before recording the run as successful.
 - Dependency artifact consumption uses dependency role plus output role, for example `dependency_outputs["elf"]["elf"]`, rather than filename suffix guessing.
 - `sw.program.image` consumes the `sw.program.elf` dependency through its declared `elf` output of type `riscv-elf`.
-- Cache skipping remains deferred; `gpgpu run` still executes adapters even when planning reports `CACHE HIT`.
+
+## Generated software ABI artifact
+
+Accepted current direction:
+
+- `sw.abi` is an internal artifact goal that generates `gpgpu_runtime.h`, `gpgpu.ld`, and `gpgpu_abi.json` from selected `architecture.*` ABI settings.
+- `sw.program.elf` depends on `sw.abi` and consumes the generated runtime header and linker script by dependency role/output role.
+- The Makefile remains the software compatibility backend, but now accepts `ABI_INCLUDE_DIR`, `RUNTIME_HEADER`, and overridable `LINKER_SCRIPT` variables so generated ABI files are used without moving generated files into source directories.
+- Program sources include `"gpgpu_runtime.h"` through the include path instead of hardcoding `../gpgpu_runtime.h`, allowing generated ABI headers to be selected by the adapter.
+- Compiler flags such as optimization, `march`, and `mabi` remain Makefile-hardcoded for now; only ABI file selection is wired through generated artifacts.
 
 ## Goal instance parameter model
 

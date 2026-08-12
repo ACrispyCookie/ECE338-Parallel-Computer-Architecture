@@ -10,7 +10,7 @@ Existing scripts are compatibility interfaces, behavioral references, regression
 
 No legacy script has been retired or deleted by the control-plane migration without explicit approval.
 
-The current branch is no longer mock-only: `gpgpu run` executes three software artifact compatibility adapters (`sw.program.native`, `sw.program.elf`, and `sw.program.image`) through the existing `sw/programs/Makefile`. Hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only or legacy-only unless a later section says otherwise.
+The current branch executes four software-side artifact adapters: `sw.abi` generates software ABI files from architecture settings, while `sw.program.native`, `sw.program.elf`, and `sw.program.image` use the existing `sw/programs/Makefile`. Hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only or legacy-only unless a later section says otherwise.
 
 No broad legacy-versus-new parity claim is made beyond the explicitly characterized software adapter behavior recorded below.
 
@@ -68,7 +68,7 @@ Compatibility behavior:
 - no `out/` artifact is created;
 - the native program is not run, so no `sw/programs/<program>/data.csv` is produced;
 - unsupported executable goals fail with `no executor adapter registered for <goal>`;
-- legacy scripts and `sw/programs/Makefile` are not modified.
+- Makefile compatibility variables are limited to artifact routing and generated ABI selection (`OUT_DIR`, `ABI_INCLUDE_DIR`, `RUNTIME_HEADER`, `LINKER_SCRIPT`).
 
 Known limitation: planner identity includes `program.optimization`, but the legacy native Makefile target currently uses `NATIVE_CFLAGS = -O2` and does not consume planner config. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
 
@@ -93,7 +93,7 @@ Compatibility behavior:
 - no `out/` artifact is created;
 - the ELF is not run;
 - `sw.program.image` and other goals remain unsupported by the executor until their own adapter milestones;
-- legacy scripts and `sw/programs/Makefile` are not modified.
+- Makefile compatibility variables are limited to artifact routing and generated ABI selection (`OUT_DIR`, `ABI_INCLUDE_DIR`, `RUNTIME_HEADER`, `LINKER_SCRIPT`).
 
 Known limitation: planner identity includes `program.optimization`, `program.march`, and `program.mabi`, but the legacy RISC-V Makefile target currently hardcodes `-O2 -march=rv32im -mabi=ilp32`. This adapter preserves legacy behavior exactly and records the mismatch for a later configuration/toolchain milestone rather than silently changing Makefile semantics.
 
@@ -119,7 +119,7 @@ Compatibility behavior:
 - no `out/` artifact is created;
 - the memory-image format and extraction pipeline are unchanged;
 - `test.program`, hardware goals, and demo goals remain unsupported by the executor until their own adapter milestones;
-- legacy scripts and `sw/programs/Makefile` are not modified.
+- Makefile compatibility variables are limited to artifact routing and generated ABI selection (`OUT_DIR`, `ABI_INCLUDE_DIR`, `RUNTIME_HEADER`, `LINKER_SCRIPT`).
 
 Known limitation: generated artifacts still live under `sw/programs/<program>/`. The tracked legacy `*_program.asm` snapshots must not be committed accidentally when compiler output changes. The `out/` root is reserved for a future generated-artifact migration milestone.
 
@@ -139,7 +139,7 @@ Compatibility behavior:
 - `sw.program.native`, `sw.program.elf`, and `sw.program.image` still call the same Makefile commands as before;
 - output paths remain in legacy `sw/programs/<program>/` locations;
 - no `out/` artifact migration occurs;
-- no Makefile targets or flags change;
+- Makefile target behavior remains compatible; variables now route outputs and generated ABI inputs;
 - unsupported goals continue to fail with `no executor adapter registered for <goal>`.
 
 Backend policy: keep Makefile as the compatibility backend for now. A later milestone may either make Makefile a thinner typed backend that receives variables from `gpgpu`, or switch specific workflows to Python-native command execution after parity tests exist.

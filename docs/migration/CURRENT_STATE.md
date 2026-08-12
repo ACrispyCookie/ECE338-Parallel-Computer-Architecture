@@ -11,7 +11,7 @@ This document reevaluates the current `gpgpu` control-plane implementation after
 
 ## Executive summary
 
-The repository now has a working typed goal planner, config resolver, graph executor, progress reporters, artifact layout/metadata helpers, conservative artifact cleaner, validated cache-status reporting, declarative goal/artifact specs, and strict typed artifact output contracts. The only executable adapters are still the software-program artifact adapters around the existing `sw/programs/Makefile`.
+The repository now has a working typed goal planner, config resolver, graph executor, progress reporters, artifact layout/metadata helpers, conservative artifact cleaner, validated cache-status reporting, declarative goal/artifact specs, strict typed artifact output contracts, and a generated software ABI artifact. Executable adapters currently cover `sw.abi` plus the software-program artifact adapters around the existing `sw/programs/Makefile`.
 
 The foundation is useful, but it is not yet a complete build system for the original project mission. Most hardware, RTL, check, demo, UART, Vivado, and visualization workflows remain planned-only.
 
@@ -33,15 +33,15 @@ Most important cleanup findings after Milestone 23:
 The registered goal graph currently contains:
 
 ```text
-13 total goals
+14 total goals
 10 public goals
-3 internal goals
+4 internal goals
 ```
 
 By kind:
 
 ```text
-artifact: 7
+artifact: 8
 action:   3
 service:  1
 check:    2
@@ -50,6 +50,7 @@ check:    2
 Executable adapters currently exist for only:
 
 ```text
+sw.abi
 sw.program.native
 sw.program.elf
 sw.program.image
@@ -58,16 +59,17 @@ sw.program.image
 That means:
 
 ```text
-3 / 13 registered goals have execution adapters
-10 / 13 registered goals are planner-only or unsupported by `gpgpu run`
+4 / 14 registered goals have execution adapters
+10 / 14 registered goals are planner-only or unsupported by `gpgpu run`
 ```
 
 ### Goal matrix
 
 | Goal | Kind | Visibility | Adapter | Current status |
 |---|---:|---:|---:|---|
+| `sw.abi` | artifact | internal | yes | Generates `gpgpu_runtime.h`, `gpgpu.ld`, and `gpgpu_abi.json` from the selected architecture ABI settings. |
 | `sw.program.native` | artifact | public | yes | Builds native executable through `sw/programs/Makefile`. |
-| `sw.program.elf` | artifact | public | yes | Builds RISC-V ELF/map through `sw/programs/Makefile`. |
+| `sw.program.elf` | artifact | public | yes | Builds RISC-V ELF/map through `sw/programs/Makefile`, consuming generated ABI header/linker artifacts from `sw.abi`. |
 | `sw.program.image` | artifact | public | yes | Builds instruction-memory image/dump through `sw/programs/Makefile`; consumes the planned ELF artifact. |
 | `hw.board.project` | artifact | internal | no | Planner-only mock Vivado-project placeholder. |
 | `hw.board.bitstream` | artifact | public | no | Planner-only bitstream artifact goal. |
@@ -100,7 +102,7 @@ That means:
 | `gpgpu list` | Implemented. |
 | `gpgpu plan` | Implemented. |
 | `gpgpu explain` | Implemented. |
-| `gpgpu run` | Implemented for three software artifact adapters only. |
+| `gpgpu run` | Implemented for `sw.abi` plus three software program artifact adapters. |
 | `gpgpu clean` | Implemented for owned artifact directories only. |
 | Artifact metadata | Implemented as `artifact.toml`. |
 | Cache status | Implemented as validated reporting. |
@@ -152,7 +154,7 @@ Current issues:
 
 - `ConfigResolver` owns schema loading, nested YAML flattening, coercion, precedence, and provenance.
 - CLI selection settings declare `manifest_dir` in `SettingSpec`; selection overrides are applied before selected manifests and all CLI overrides are applied again at final precedence.
-- Config values such as `program.optimization`, `program.march`, and `program.mabi` affect identities, but the Makefile backend still hardcodes corresponding flags.
+- Config values such as `program.optimization`, `program.march`, and `program.mabi` affect identities, but the Makefile backend still hardcodes corresponding compiler flags. ABI header/linker selection is now wired through generated `sw.abi` artifacts.
 
 ### `tools/gpgpu/planner.py`
 

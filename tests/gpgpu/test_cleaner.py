@@ -113,7 +113,7 @@ class CleanerTests(unittest.TestCase):
         plan = self.plan("sw.program.image")
         summary = Cleaner(repo_root=ROOT).clean_plan(plan, deps=True, dry_run=True)
 
-        self.assertEqual([record.node.goal_id for record in summary.records], ["sw.program.elf", "sw.program.image"])
+        self.assertEqual([record.node.goal_id for record in summary.records], ["sw.abi", "sw.program.elf", "sw.program.image"])
 
     def test_clean_non_artifact_root_without_deps_errors(self):
         from tools.gpgpu.cleaner import CleanError, Cleaner

@@ -76,6 +76,12 @@ class ArtifactValidationTests(unittest.TestCase):
                         f'{json.dumps(path.relative_to(ROOT).as_posix())} = "{_sha256_for_test(path)}"'
                         for path in input_paths
                     ],
+                    "",
+                    "[dependencies]",
+                    *[
+                        f'{json.dumps(goal_id)} = {json.dumps(identity)}'
+                        for goal_id, identity in self.node.dependency_identities
+                    ],
                 ]
             )
         )

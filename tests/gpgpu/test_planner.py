@@ -23,7 +23,7 @@ class PlannerFoundationTests(unittest.TestCase):
         return Planner(config)
 
     def tearDown(self):
-        for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
+        for goal_id in ("sw.abi", "sw.program.native", "sw.program.elf", "sw.program.image"):
             shutil.rmtree(ROOT / "out" / "artifacts" / goal_id, ignore_errors=True)
 
     def write_metadata(self, node, *, goal_id=None, identity=None):
@@ -68,6 +68,10 @@ class PlannerFoundationTests(unittest.TestCase):
             for input_path in input_paths:
                 input_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
                 handle.write(f'{json.dumps(input_path.relative_to(ROOT).as_posix())} = "sha256:{input_hash}"\n')
+            if node.dependency_identities:
+                handle.write("\n[dependencies]\n")
+                for goal_id, identity in node.dependency_identities:
+                    handle.write(f'{json.dumps(goal_id)} = {json.dumps(identity)}\n')
         return directory
 
     def test_runtime_options_do_not_change_native_program_identity(self):
@@ -159,7 +163,7 @@ class PlannerFoundationTests(unittest.TestCase):
         goals_path = ROOT / "config" / "goals.yaml"
         self.assertTrue(goals_path.exists())
         self.assertNotIn("GOALS: dict[str, GoalDefinition] = {", (ROOT / "tools" / "gpgpu" / "goals.py").read_text())
-        self.assertEqual(len(GOALS), 13)
+        self.assertEqual(len(GOALS), 14)
 
     def test_goals_yaml_uses_nested_goal_structure(self):
         goals = yaml.safe_load((ROOT / "config" / "goals.yaml").read_text())["goals"]
@@ -303,7 +307,7 @@ class PlannerFoundationTests(unittest.TestCase):
 
         self.assertNotIn("sw.program.compile_riscv", GOALS)
         plan = self.make_planner().plan("sw.program.elf")
-        self.assertEqual([node.goal_id for node in plan.nodes], ["sw.program.elf"])
+        self.assertEqual([node.goal_id for node in plan.nodes], ["sw.abi", "sw.program.elf"])
 
     def test_goal_instance_params_are_declared_without_artifact_or_runtime_param_fields(self):
         from tools.gpgpu.goals import GOALS
@@ -377,8 +381,9 @@ class PlannerFoundationTests(unittest.TestCase):
 
         rendered = Planner(config, repo_root=ROOT).plan("sw.program.elf").format_plan()
 
-        self.assertIn("BUILD    CACHE HIT", rendered)
-        self.assertNotIn("CACHE MISS", rendered)
+        self.assertIn("sw.program.elf", rendered)
+        elf_line = next(line for line in rendered.splitlines() if line.startswith("BUILD") and "sw.program.elf" in line)
+        self.assertIn("CACHE HIT", elf_line)
 
     def test_verbose_plan_reports_cache_miss_reason_for_metadata_mismatch(self):
         config = ConfigResolver().resolve(set_values=["program=nbody"])

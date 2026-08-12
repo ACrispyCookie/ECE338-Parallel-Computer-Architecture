@@ -9,6 +9,7 @@ import shutil
 import sys
 import tomllib
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,7 @@ class ExecutorStructureTests(unittest.TestCase):
     def test_program_adapters_are_registered_by_goal_id(self):
         from tools.gpgpu.adapters import ADAPTERS
 
+        self.assertIn("sw.abi", ADAPTERS)
         self.assertIn("sw.program.native", ADAPTERS)
         self.assertIn("sw.program.elf", ADAPTERS)
         self.assertIn("sw.program.image", ADAPTERS)
@@ -79,7 +81,7 @@ class GraphRunTests(unittest.TestCase):
         self._clean_program_artifacts()
 
     def _clean_program_artifacts(self):
-        for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
+        for goal_id in ("sw.abi", "sw.program.native", "sw.program.elf", "sw.program.image"):
             shutil.rmtree(ROOT / "out" / "artifacts" / goal_id, ignore_errors=True)
 
     def config(self):
@@ -106,22 +108,25 @@ class GraphRunTests(unittest.TestCase):
         summary = Executor(
             config,
             adapters={
+                "sw.abi": record("abi"),
                 "sw.program.elf": record("elf"),
                 "sw.program.image": record("image"),
             },
         ).run_plan(plan)
 
-        self.assertEqual(calls, ["sw.program.elf", "sw.program.image"])
+        self.assertEqual(calls, ["sw.abi", "sw.program.elf", "sw.program.image"])
         self.assertEqual(summary.returncode, 0)
         rendered = format_run_summary(summary, repo_root=ROOT)
         self.assertIn("Run: sw.program.image", rendered)
-        self.assertIn("Plan: 2 executable goals, 2 planned goals", rendered)
+        self.assertIn("Plan: 3 executable goals, 3 planned goals", rendered)
         self.assertNotIn("SKIPPED", rendered)
         self.assertNotIn("sw.program.compile_riscv", rendered)
+        self.assertLess(rendered.index("RUNNING   sw.abi"), rendered.index("RUNNING   sw.program.elf"))
         self.assertLess(rendered.index("RUNNING   sw.program.elf"), rendered.index("RUNNING   sw.program.image"))
+        self.assertIn("DONE      sw.abi", rendered)
         self.assertIn("DONE      sw.program.elf", rendered)
         self.assertIn("DONE      sw.program.image", rendered)
-        self.assertIn("completed: 2", rendered)
+        self.assertIn("completed: 3", rendered)
         self.assertIn("skipped:   0", rendered)
         self.assertIn("failed:    0", rendered)
 
@@ -168,10 +173,15 @@ class GraphRunTests(unittest.TestCase):
                 produced=tuple(context.declared_outputs.values()),
             )
 
-        summary = Executor(config, adapters={"sw.program.elf": elf, "sw.program.image": image}).run_plan(plan)
+        def abi(context):
+            for output in context.declared_outputs.values():
+                output.path.write_text(f"{output.role}\n", encoding="utf-8")
+            return RunResult(goal_id=context.goal_id, command=("fake", "abi"), returncode=0, produced=tuple(context.declared_outputs.values()))
+
+        summary = Executor(config, adapters={"sw.abi": abi, "sw.program.elf": elf, "sw.program.image": image}).run_plan(plan)
 
         self.assertEqual(summary.returncode, 0)
-        self.assertEqual(seen_elf_path, [artifact_dir(ROOT, plan.nodes[0]) / "nbody.elf"])
+        self.assertEqual(seen_elf_path, [artifact_dir(ROOT, plan.nodes[1]) / "nbody.elf"])
 
     def test_run_plan_skips_validated_artifact_cache_hit(self):
         from tools.gpgpu.artifacts import artifact_dir, resolve_artifact_inputs, resolve_artifact_outputs, write_artifact_metadata
@@ -228,7 +238,7 @@ class GraphRunTests(unittest.TestCase):
             elf_dir,
             node=initial.root,
             produced=elf_outputs,
-            dependency_identities={},
+            dependency_identities=dict(initial.root.dependency_identities),
             input_paths=resolve_artifact_inputs(ROOT, initial.root, config),
             repo_root=ROOT,
         )
@@ -350,16 +360,17 @@ class GraphRunTests(unittest.TestCase):
 
         summary = Executor(
             config,
-            adapters={"sw.program.elf": record("elf"), "sw.program.image": record("image")},
+            adapters={"sw.abi": record("abi"), "sw.program.elf": record("elf"), "sw.program.image": record("image")},
         ).run_plan(plan, reporter=PlainRunReporter(stream, repo_root=ROOT, color=False))
 
         rendered = stream.getvalue()
         self.assertEqual(summary.returncode, 0)
         self.assertIn("gpgpu run sw.program.image", rendered)
+        self.assertIn("✓ sw.abi", rendered)
         self.assertIn("✓ sw.program.elf", rendered)
         self.assertIn("✓ sw.program.image", rendered)
         self.assertNotIn("sw.program.compile_riscv", rendered)
-        self.assertIn("Summary: 2 completed, 0 skipped, 0 failed", rendered)
+        self.assertIn("Summary: 3 completed, 0 skipped, 0 failed", rendered)
         self.assertNotIn("RUNNING", rendered)
         self.assertNotIn("DONE", rendered)
 
@@ -459,7 +470,7 @@ class ProgramAdapterTests(unittest.TestCase):
         self.map_file.unlink(missing_ok=True)
         self.dump_asm.unlink(missing_ok=True)
         self.mem.unlink(missing_ok=True)
-        for goal_id in ("sw.program.native", "sw.program.elf", "sw.program.image"):
+        for goal_id in ("sw.abi", "sw.program.native", "sw.program.elf", "sw.program.image"):
             shutil.rmtree(ROOT / "out" / "artifacts" / goal_id, ignore_errors=True)
 
     def require_native_tools(self):
@@ -484,6 +495,78 @@ class ProgramAdapterTests(unittest.TestCase):
     def metadata(self, out_dir: Path) -> dict:
         with (out_dir / "artifact.toml").open("rb") as handle:
             return tomllib.load(handle)
+
+    def test_sw_abi_adapter_generates_runtime_linker_and_metadata(self):
+        out_dir = self.artifact_dir("sw.abi")
+        runtime_header = out_dir / "gpgpu_runtime.h"
+        linker_script = out_dir / "gpgpu.ld"
+        abi_json = out_dir / "gpgpu_abi.json"
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = main(["--color", "never", "run", "sw.abi", "--set", f"program={self.program}"])
+
+        rendered = stdout.getvalue()
+        self.assertEqual(code, 0, stderr.getvalue() + rendered)
+        self.assertIn("gpgpu run sw.abi", rendered)
+        self.assertTrue(runtime_header.exists())
+        self.assertTrue(linker_script.exists())
+        self.assertTrue(abi_json.exists())
+
+        header = runtime_header.read_text()
+        self.assertIn("#define GPGPU_NUM_CORES    32u", header)
+        self.assertIn("#define GPGPU_STACK_STRIDE 64u", header)
+        self.assertIn('\"mv %0, x31\"', header)
+        self.assertIn('"slli x6, x5, 6\\n"', header)
+
+        linker = linker_script.read_text()
+        self.assertIn("IMEM (rx)  : ORIGIN = 0x00000000, LENGTH = 8K", linker)
+        self.assertIn("__gpu_args_base      = 0x00000040;", linker)
+        self.assertIn("__gpu_stack_bottom   = 0x00001800;", linker)
+
+        metadata = json.loads(abi_json.read_text())
+        self.assertEqual(metadata["architecture"], "gpgpu32")
+        self.assertEqual(metadata["abi"]["args"]["base_byte"], 0x40)
+        self.assertEqual(metadata["abi"]["data"]["limit_byte"], 0x1800)
+        self.assertEqual(metadata["abi"]["stack"]["bottom_byte"], 0x1800)
+
+    def test_sw_program_elf_depends_on_generated_abi(self):
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
+        plan = Planner(config, repo_root=ROOT).plan("sw.program.elf")
+        ids = [node.goal_id for node in plan.nodes]
+
+        self.assertEqual(ids, ["sw.abi", "sw.program.elf"])
+        self.assertEqual(dict(plan.root.dependency_roles)["abi"], plan.nodes[0].key)
+
+    def test_elf_adapter_passes_generated_abi_files_to_make(self):
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
+        plan = Planner(config, repo_root=ROOT).plan("sw.program.elf")
+        seen_command: list[tuple[str, ...]] = []
+
+        def abi(context):
+            for output in context.declared_outputs.values():
+                output.path.write_text("generated\n")
+            return RunResult(goal_id=context.goal_id, command=("fake", "abi"), returncode=0, produced=tuple(context.declared_outputs.values()))
+
+        def elf(context):
+            module = __import__("tools.gpgpu.adapters.sw_programs", fromlist=["run_elf"])
+            with mock.patch.object(module.subprocess, "run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = ""
+                run.return_value.stderr = ""
+                command = module.run_elf(context).command
+                seen_command.append(command)
+            for output in context.declared_outputs.values():
+                output.path.write_text(output.role)
+            return RunResult(goal_id=context.goal_id, command=command, returncode=0, produced=tuple(context.declared_outputs.values()))
+
+        summary = Executor(config, adapters={"sw.abi": abi, "sw.program.elf": elf}).run_plan(plan)
+
+        self.assertEqual(summary.returncode, 0)
+        command = seen_command[0]
+        self.assertIn("ABI_INCLUDE_DIR=" + str(artifact_dir(ROOT, plan.nodes[0])), command)
+        self.assertIn("LINKER_SCRIPT=" + str(artifact_dir(ROOT, plan.nodes[0]) / "gpgpu.ld"), command)
 
     def test_unsupported_run_goal_fails_clearly(self):
         stdout = io.StringIO()
@@ -562,7 +645,9 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("gpgpu run sw.program.elf", rendered)
         self.assertNotIn("sw.program.compile_riscv", rendered)
-        self.assertIn("[1/1] sw.program.elf", rendered)
+        self.assertIn("[1/2] sw.abi", rendered)
+        self.assertIn("[2/2] sw.program.elf", rendered)
+        self.assertIn("✓ sw.abi", rendered)
         self.assertIn("✓ sw.program.elf", rendered)
         self.assertIn("produced nbody.elf, nbody.map", rendered)
         self.assertIn(f"out/artifacts/sw.program.elf/{out_dir.name}", rendered)
@@ -600,8 +685,10 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(code, 0, stderr.getvalue() + rendered)
         self.assertIn("gpgpu run sw.program.image", rendered)
         self.assertNotIn("sw.program.compile_riscv", rendered)
-        self.assertIn("[1/2] sw.program.elf", rendered)
-        self.assertIn("[2/2] sw.program.image", rendered)
+        self.assertIn("[1/3] sw.abi", rendered)
+        self.assertIn("[2/3] sw.program.elf", rendered)
+        self.assertIn("[3/3] sw.program.image", rendered)
+        self.assertIn("✓ sw.abi", rendered)
         self.assertIn("✓ sw.program.elf", rendered)
         self.assertIn("✓ sw.program.image", rendered)
         self.assertIn("produced nbody_instructions.mem, nbody_dump_real.asm", rendered)
