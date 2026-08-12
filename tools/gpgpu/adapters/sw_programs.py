@@ -55,13 +55,13 @@ def _make_command(program: str, out_dir: Path, target: str, *, extra: tuple[str,
     return ("make", "-C", "sw/programs", f"PROG={program}", f"OUT_DIR={out_dir}", *extra, target)
 
 
-def _dependency_output(context: ExecutionContext, dependency_role: str, output_role: str, *, artifact_type: str) -> Path:
-    artifact = context.dependency_outputs.get(dependency_role, {}).get(output_role)
+def _dependency_output(context: ExecutionContext, dependency_goal_id: str, output_role: str, *, artifact_type: str) -> Path:
+    artifact = context.dependency_outputs.get(dependency_goal_id, {}).get(output_role)
     if artifact is None:
-        raise ExecuteError(f"{context.goal_id} requires dependency {dependency_role}.{output_role}")
+        raise ExecuteError(f"{context.goal_id} requires dependency {dependency_goal_id}.{output_role}")
     if artifact.artifact_type != artifact_type:
         raise ExecuteError(
-            f"{context.goal_id} requires {dependency_role}.{output_role} type {artifact_type}, got {artifact.artifact_type}"
+            f"{context.goal_id} requires {dependency_goal_id}.{output_role} type {artifact_type}, got {artifact.artifact_type}"
         )
     return artifact.path
 
