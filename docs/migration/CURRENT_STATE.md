@@ -133,7 +133,8 @@ Current issues:
 - `implementation_version` defaults to `"mock-v1"`, which is stale for real software adapters.
 - `hw.board.project` is still explicitly mock-only.
 - `sw.program.image` now declares current adapter reality: instruction-memory image plus objdump artifact, not a fake data-memory artifact.
-- Artifact outputs use a minimal typed contract: role, path template, and semantic type string.
+- Artifact outputs use a minimal contract: role, description, and path template.
+- `sw.abi` renders `sw/programs/gpgpu_runtime.h.in` and `sw/programs/gpgpu.ld.in`; the Python adapter owns validation and substitution, not embedded C/linker-script bodies.
 - All goal kinds declare one `params` tuple for normalized goal-instance parameters; artifact-only `artifact_params` and action/service-only `runtime_params` fields are no longer part of the goal schema.
 
 ### `tools/gpgpu/config.py`

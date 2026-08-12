@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from tools.gpgpu.executor import ExecutionContext, RunResult
+
+
+_TEMPLATE_PATTERN = re.compile(r"\$\{([A-Za-z0-9_.]+)\}")
+_RUNTIME_HEADER_TEMPLATE = Path("sw/programs/gpgpu_runtime.h.in")
+_LINKER_SCRIPT_TEMPLATE = Path("sw/programs/gpgpu.ld.in")
 
 
 @dataclass(frozen=True)
@@ -79,10 +87,17 @@ class AbiModel:
 def run_sw_abi(context: ExecutionContext) -> RunResult:
     model = _model_from_context(context)
     _validate(model)
+    variables = _template_variables(model)
 
     outputs = context.declared_outputs
-    outputs["runtime_header"].path.write_text(_render_runtime_header(model), encoding="utf-8")
-    outputs["linker_script"].path.write_text(_render_linker_script(model), encoding="utf-8")
+    outputs["runtime_header"].path.write_text(
+        _render_template(context.repo_root / _RUNTIME_HEADER_TEMPLATE, variables),
+        encoding="utf-8",
+    )
+    outputs["linker_script"].path.write_text(
+        _render_template(context.repo_root / _LINKER_SCRIPT_TEMPLATE, variables),
+        encoding="utf-8",
+    )
     outputs["metadata"].path.write_text(json.dumps(_metadata(model), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     return RunResult(
@@ -141,163 +156,61 @@ def _length(value: int) -> str:
     return f"{value // 1024}K" if value % 1024 == 0 else str(value)
 
 
-def _render_runtime_header(model: AbiModel) -> str:
-    return f"""#ifndef GPGPU_RUNTIME_H
-#define GPGPU_RUNTIME_H
-
-#include <stdint.h>
-
-/* Generated from config/architectures/{model.architecture}.yaml. */
-/* Linker-provided DMEM symbols from gpgpu.ld.  These are byte addresses from
- * the RISC-V core's point of view; host UART DMEM word offset = address / 4. */
-extern volatile int __gpu_args_base[];
-extern char __gpu_stack_bottom[];
-extern char __stack_top[];
-
-#define GPGPU_ARGS   ((volatile int *)__gpu_args_base)
-
-#define GPGPU_NUM_CORES    {model.thread_count}u
-#define GPGPU_STACK_STRIDE {model.stack_per_lane_bytes}u
-
-static inline __attribute__((always_inline)) unsigned int gpgpu_thread_id(void)
-{{
-    unsigned int tid;
-    __asm__ volatile("mv %0, {model.thread_id_register}" : "=r"(tid));
-    return tid;
-}}
-
-/* Use this for normal C kernels that may spill registers.
- *
- * Example:
- *
- *   static void kernel_main(void) {{
- *       unsigned int tid = gpgpu_thread_id();
- *       ... ordinary C that may use the stack ...
- *   }}
- *   GPGPU_START(kernel_main)
- *
- * The wrapper runs at PC 0, gives every lane a private {model.stack_per_lane_bytes}-byte stack slice at
- * the top of DMEM, calls kernel_main(), then returns to the host-controller
- * completion convention by looping forever.
- */
-#define GPGPU_START(kernel_fn)                                                 \\
-    __attribute__((naked, noreturn, section(".text.start"))) void _start(void) \\
-    {{                                                                          \\
-        __asm__ volatile(                                                      \\
-            "mv x5, {model.thread_id_register}\\n"                                                     \\
-            "slli x6, x5, {model.stack_stride_shift}\\n"                                                 \\
-            "lui sp, %hi(__stack_top)\\n"                                       \\
-            "addi sp, sp, %lo(__stack_top)\\n"                                  \\
-            "sub sp, sp, x6\\n"                                                 \\
-            "jal x1, " #kernel_fn "\\n"                                         \\
-            "1:\\n"                                                             \\
-            "jal x0, 1b\\n"                                                     \\
-        );                                                                     \\
-        __builtin_unreachable();                                               \\
-    }}
-
-#endif /* GPGPU_RUNTIME_H */
-"""
+def _template_variables(model: AbiModel) -> dict[str, str]:
+    return {
+        "architecture": model.architecture,
+        "architecture.rtl.thread.count": str(model.thread_count),
+        "architecture.rtl.thread.id_register": model.thread_id_register,
+        "architecture.memory.word_bytes": str(model.word_bytes),
+        "architecture.memory.imem.origin": str(model.imem_origin),
+        "architecture.memory.imem.origin.hex": _hex(model.imem_origin),
+        "architecture.memory.imem.words": str(model.imem_words),
+        "architecture.memory.imem.bytes": str(model.imem_bytes),
+        "architecture.memory.imem.bytes.length": _length(model.imem_bytes),
+        "architecture.memory.dmem.origin": str(model.dmem_origin),
+        "architecture.memory.dmem.origin.hex": _hex(model.dmem_origin),
+        "architecture.memory.dmem.words": str(model.dmem_words),
+        "architecture.memory.dmem.bytes": str(model.dmem_bytes),
+        "architecture.memory.dmem.bytes.length": _length(model.dmem_bytes),
+        "architecture.abi.args.base_word": str(model.args_base_word),
+        "architecture.abi.args.base_byte": str(model.args_base_byte),
+        "architecture.abi.args.base_byte.hex": _hex(model.args_base_byte),
+        "architecture.abi.args.words": str(model.args_words),
+        "architecture.abi.args.end_word": str(model.args_end_word),
+        "architecture.abi.args.end_word.last": str(model.args_end_word - 1),
+        "architecture.abi.args.end_byte": str(model.args_end_byte),
+        "architecture.abi.args.end_byte.hex": _hex(model.args_end_byte),
+        "architecture.abi.data.base_word": str(model.data_base_word),
+        "architecture.abi.data.base_byte": str(model.data_base_byte),
+        "architecture.abi.data.base_byte.hex": _hex(model.data_base_byte),
+        "architecture.abi.data.limit_word": str(model.data_limit_word),
+        "architecture.abi.data.limit_byte": str(model.data_limit_byte),
+        "architecture.abi.data.limit_byte.hex": _hex(model.data_limit_byte),
+        "architecture.abi.stack.per_lane_bytes": str(model.stack_per_lane_bytes),
+        "architecture.abi.stack.per_lane_words": str(model.stack_per_lane_words),
+        "architecture.abi.stack.per_lane_bytes.shift": str(model.stack_stride_shift),
+        "architecture.abi.stack.top_word": str(model.stack_top_word),
+        "architecture.abi.stack.top_word.last": str(model.stack_top_word - 1),
+        "architecture.abi.stack.top_byte": str(model.stack_top_byte),
+        "architecture.abi.stack.top_byte.hex": _hex(model.stack_top_byte),
+        "architecture.abi.stack.bottom_word": str(model.stack_bottom_word),
+        "architecture.abi.stack.bottom_byte": str(model.stack_bottom_byte),
+        "architecture.abi.stack.bottom_byte.hex": _hex(model.stack_bottom_byte),
+    }
 
 
-def _render_linker_script(model: AbiModel) -> str:
-    return f"""/*
- * Linker script for the GPGPU.
- *
- * Generated from config/architectures/{model.architecture}.yaml.
- * The RTL has separate instruction and data memories, but the RISC-V cores still
- * use ordinary byte addresses for loads/stores. Host-side DMEM commands use
- * word offsets, so byte address A corresponds to host DMEM word A / {model.word_bytes}.
- */
-OUTPUT_ARCH(riscv)
-ENTRY(_start)
+def _render_template(path: Path, variables: Mapping[str, str]) -> str:
+    template = path.read_text(encoding="utf-8")
 
-MEMORY
-{{
-    /* {model.imem_words} instructions / {model.dmem_words} data words. */
-    IMEM (rx)  : ORIGIN = {_hex(model.imem_origin)}, LENGTH = {_length(model.imem_bytes)}
-    DMEM (rw)  : ORIGIN = {_hex(model.dmem_origin)}, LENGTH = {_length(model.dmem_bytes)}
-}}
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        try:
+            return variables[name]
+        except KeyError as exc:
+            raise ValueError(f"unknown ABI template variable {name!r} in {path}") from exc
 
-/* Host/kernel ABI windows, expressed as RISC-V byte addresses. */
-__gpu_args_base      = {_hex(model.args_base_byte)}; /* host DMEM word {model.args_base_word} */
-__gpu_args_end       = {_hex(model.args_end_byte)}; /* words {model.args_base_word}..{model.args_end_word - 1} */
-
-/* Per-lane spill stacks: {model.thread_count} lanes * {model.stack_per_lane_bytes} bytes = DMEM[{model.stack_bottom_word}..{model.stack_top_word - 1}]. */
-__gpu_num_cores      = {model.thread_count};
-__gpu_stack_stride   = {model.stack_per_lane_bytes};
-__gpu_stack_bottom   = {_hex(model.stack_bottom_byte)};
-__stack_top          = {_hex(model.stack_top_byte)};
-
-/*
- * Compiler-owned data.
- *
- * Starts at {_hex(model.data_base_byte)}, available for .rodata/.sdata/.data/.bss.
- */
-__gpu_data_base      = {_hex(model.data_base_byte)};
-__gpu_data_limit     = __gpu_stack_bottom;
-
-SECTIONS
-{{
-    . = ORIGIN(IMEM);
-
-    .text :
-    {{
-        /* Put reset/entry code at PC 0 when built with -ffunction-sections. */
-        KEEP(*(.text.start .text.start.*))
-        KEEP(*(.text._start))
-        *(.text .text.*)
-    }} > IMEM
-
-    /*
-     * Move the DMEM location counter to the compiler-owned data region.
-     * This keeps compiler-generated data away from the host argument window.
-     */
-    . = __gpu_data_base;
-    . = ALIGN(4);
-    PROVIDE(__data_start = .);
-
-    .rodata ALIGN(4) :
-    {{
-        *(.srodata .srodata.*)
-        *(.rodata .rodata.*)
-    }} > DMEM
-
-    .sdata ALIGN(4) :
-    {{
-        *(.sdata .sdata.*)
-    }} > DMEM
-
-    .data ALIGN(4) :
-    {{
-        *(.data .data.*)
-    }} > DMEM
-
-    .bss ALIGN(4) (NOLOAD) :
-    {{
-        PROVIDE(__bss_start = .);
-        *(.sbss .sbss.*)
-        *(.bss .bss.*)
-        *(COMMON)
-        . = ALIGN(4);
-        PROVIDE(__bss_end = .);
-    }} > DMEM
-
-    PROVIDE(__data_end = .);
-
-    /DISCARD/ :
-    {{
-        *(.comment)
-        *(.riscv.attributes)
-        *(.note .note.*)
-        *(__patchable_function_entries)
-    }}
-}}
-
-ASSERT(SIZEOF(.text) <= LENGTH(IMEM), "GPGPU IMEM overflow: program has more than {model.imem_words} instructions/{model.imem_bytes} bytes");
-ASSERT(__data_end <= __gpu_data_limit, "GPGPU DMEM overflow: compiler data/bss collides with per-lane stack window");
-ASSERT(__gpu_args_end <= __gpu_data_base, "GPGPU ABI error: data region collides with argument window");
-"""
+    rendered = _TEMPLATE_PATTERN.sub(replace, template)
+    return rendered if rendered.endswith("\n") else rendered + "\n"
 
 
 def _metadata(model: AbiModel) -> dict[str, object]:

@@ -20,7 +20,8 @@ goals:
       - architecture.abi.stack.top_word
       artifact:
         input_globs:
-        - config/architectures/{architecture}.yaml
+        - sw/programs/gpgpu_runtime.h.in
+        - sw/programs/gpgpu.ld.in
         outputs:
           runtime_header:
             description: generated GPGPU runtime header

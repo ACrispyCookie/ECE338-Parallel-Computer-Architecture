@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import tomllib
 import unittest
 from unittest import mock
@@ -530,6 +531,54 @@ class ProgramAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["abi"]["args"]["base_byte"], 0x40)
         self.assertEqual(metadata["abi"]["data"]["limit_byte"], 0x1800)
         self.assertEqual(metadata["abi"]["stack"]["bottom_byte"], 0x1800)
+
+    def test_sw_abi_templates_are_artifact_inputs_without_architecture_manifest_glob(self):
+        from tools.gpgpu.artifacts import resolve_artifact_inputs
+
+        config = ConfigResolver().resolve(set_values=[f"program={self.program}"])
+        node = Planner(config, repo_root=ROOT).plan("sw.abi").root
+        relative = {path.relative_to(ROOT).as_posix() for path in resolve_artifact_inputs(ROOT, node, config)}
+
+        self.assertEqual(
+            relative,
+            {
+                "sw/programs/gpgpu_runtime.h.in",
+                "sw/programs/gpgpu.ld.in",
+            },
+        )
+
+    def test_sw_abi_template_renderer_rejects_unknown_variables(self):
+        from tools.gpgpu.adapters import sw_abi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            template = Path(tmp) / "bad_template.in"
+            template.write_text("value=${architecture.rtl.thread.typo}\n", encoding="utf-8")
+            model = sw_abi.AbiModel(
+                architecture="gpgpu32",
+                word_bytes=4,
+                thread_count=32,
+                thread_id_register="x31",
+                imem_origin=0,
+                imem_words=2048,
+                dmem_origin=0,
+                dmem_words=2048,
+                args_base_word=16,
+                args_words=4,
+                data_base_word=1024,
+                stack_per_lane_bytes=64,
+                stack_top_word=2048,
+            )
+
+            with self.assertRaisesRegex(ValueError, "unknown ABI template variable 'architecture.rtl.thread.typo'"):
+                sw_abi._render_template(template, sw_abi._template_variables(model))
+
+    def test_sw_abi_adapter_does_not_embed_generated_header_or_linker_body(self):
+        source = (ROOT / "tools" / "gpgpu" / "adapters" / "sw_abi.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("#ifndef GPGPU_RUNTIME_H", source)
+        self.assertNotIn("SECTIONS", source)
+        self.assertIn("#ifndef GPGPU_RUNTIME_H", (ROOT / "sw" / "programs" / "gpgpu_runtime.h.in").read_text(encoding="utf-8"))
+        self.assertIn("SECTIONS", (ROOT / "sw" / "programs" / "gpgpu.ld.in").read_text(encoding="utf-8"))
 
     def test_sw_program_elf_depends_on_generated_abi(self):
         config = ConfigResolver().resolve(set_values=[f"program={self.program}"])

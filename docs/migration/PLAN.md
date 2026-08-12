@@ -578,6 +578,7 @@ Scope:
 - require declared outputs to exist after adapter success before a run is recorded as successful;
 - pass dependency outputs to adapters by dependency goal id and output role;
 - update `sw.program.image` to consume the declared ELF dependency output rather than scanning paths by suffix.
+- render generated ABI header/linker outputs from editable templates at `sw/programs/gpgpu_runtime.h.in` and `sw/programs/gpgpu.ld.in` instead of embedding those file bodies in Python.
 
 Non-goals:
 
